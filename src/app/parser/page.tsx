@@ -12,7 +12,6 @@ import {
   updateGroupSchedule, 
   saveGroupToDB, 
   deleteGroup, 
-  updateGroup 
 } from "@/app/actions";
 
 // --- CONFIGURATION ---
@@ -58,7 +57,7 @@ export default function CombinedGroupsAndParser() {
   const [selectedGroupId, setSelectedGroupId] = useState<string>("manual");
   const [isSaving, setIsSaving] = useState(false);
   const [members, setMembers] = useState<Member[]>([
-    { id: 1, name: "Member 1", raw: "", parsed: [] },
+    { id: 1, name: "Member 1", raw: "", parsed: [] }, // this is for the members of the team to separate it 
     { id: 2, name: "Member 2", raw: "", parsed: [] },
     { id: 3, name: "Member 3", raw: "", parsed: [] },
     { id: 4, name: "Member 4", raw: "", parsed: [] },
@@ -99,7 +98,7 @@ export default function CombinedGroupsAndParser() {
 
   const handleGroupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingId) {
+    /**if (editingId) {
       const res = await updateGroup(editingId, formData);
       if (res.success) {
         setEditingId(null);
@@ -108,7 +107,7 @@ export default function CombinedGroupsAndParser() {
     } else {
       const res = await saveGroupToDB(formData);
       if (res.success) alert("Group registered!");
-    }
+    }*/
     setFormData({ groupName: '', thesisTitle: '', members: ['', '', '', ''], assignPM: '' });
     loadGroups();
   };
@@ -219,30 +218,7 @@ export default function CombinedGroupsAndParser() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
           {/* FORM */}
-          <div className="lg:col-span-1 bg-white rounded-[40px] border border-slate-200 shadow-xl p-8 h-fit">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="font-bold flex items-center gap-2">
-                {editingId ? <Edit3 size={18} className="text-blue-600"/> : <Plus size={18} className="text-blue-600"/>}
-                {editingId ? "Edit Group" : "Register Group"}
-              </h2>
-              {editingId && (
-                <button onClick={() => { setEditingId(null); setFormData({ groupName: '', thesisTitle: '', members: ['', '', '', ''], assignPM: '' }); }} className="text-xs text-red-500 font-bold">Cancel</button>
-              )}
-            </div>
-            <form onSubmit={handleGroupSubmit} className="space-y-4">
-              <input required value={formData.groupName} onChange={e => setFormData({...formData, groupName: e.target.value})} placeholder="Group Name" className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 outline-none text-sm"/>
-              <textarea required value={formData.thesisTitle} onChange={e => setFormData({...formData, thesisTitle: e.target.value})} placeholder="Thesis Title" className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 h-24 outline-none text-sm resize-none"/>
-              {formData.members.map((m, i) => (
-                <input key={i} value={m} onChange={e => updateFormMember(i, e.target.value)} placeholder={`Member ${i+1}`} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-2 text-xs outline-none"/>
-              ))}
-              <button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
-                {editingId ? <Save size={18}/> : <Plus size={18}/>}
-                {editingId ? "Update" : "Register"}
-              </button>
-            </form>
-          </div>
 
-          {/* LIST */}
           <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
             {groups.map((group) => (
               <div key={group._id} className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm group hover:shadow-md transition-all">
@@ -258,7 +234,10 @@ export default function CombinedGroupsAndParser() {
                 </div>
                 <div className="flex flex-wrap gap-1 mt-4">
                   {group.members.filter((m:any)=>m.trim()!=="").map((m:any, i:any) => (
-                    <span key={i} className="text-[9px] bg-slate-50 px-2 py-1 rounded-md text-slate-500 border border-slate-100">{m}</span>
+                    <span key={i} className="text-[9px] bg-slate-50 px-2 py-1 rounded-md text-slate-500 border border-slate-100">
+                      {/* Use 'assignPM' here to match your formData */}
+                      {m === group.assignPM && "👑 "}
+                      {m}</span>
                   ))}
                 </div>
               </div>

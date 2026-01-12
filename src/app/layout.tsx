@@ -5,7 +5,8 @@ import Link from 'next/link';
 // This connects your Tailwind styles
 import "./globals.css"; 
 import { 
-  Users, Calendar, LayoutDashboard, ChevronLeft, ChevronRight, GraduationCap 
+  Users, Calendar, LayoutDashboard, ChevronLeft, ChevronRight, GraduationCap, 
+  Medal
 } from 'lucide-react';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
     { name: 'Schedule Parser', path: '/parser', icon: Calendar },
     { name: 'Thesis Groups', path: '/groups', icon: Users },
+    { name: 'Leaderboards', path: '/leaderboards', icon: Medal },
   ];
 
   return (

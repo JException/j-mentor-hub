@@ -1,14 +1,13 @@
-"use server"
-import { connectDB } from "@/lib/db";
+"use server" 
+import { dbConnect } from "@/lib/db";
 import { Group } from "@/models/Group";
+// ... the rest of your imports
 import { revalidatePath } from "next/cache";
 
-/**
- * Saves a new thesis group to the database
- */
+
 export async function saveGroupToDB(formData: any) {
   try {
-    await connectDB();
+    await dbConnect();
     await Group.create(formData);
     revalidatePath('/groups'); 
     return { success: true };
@@ -18,12 +17,10 @@ export async function saveGroupToDB(formData: any) {
   }
 }
 
-/**
- * Fetches all groups to populate your dropdown
- */
+
 export async function getGroupsFromDB() {
   try {
-    await connectDB();
+    await dbConnect();
     const groups = await Group.find({}).sort({ createdAt: -1 });
     return JSON.parse(JSON.stringify(groups));
   } catch (error) {
@@ -32,13 +29,9 @@ export async function getGroupsFromDB() {
   }
 }
 
-/**
- * UPDATES an existing group with the parsed schedules
- * This is the function the error said was missing!
- */
 export async function updateGroupSchedule(groupId: string, scheduleData: any) {
   try {
-    await connectDB();
+    await dbConnect();
     
     // Find the group and update only the 'schedules' field
     await Group.findByIdAndUpdate(groupId, { 
@@ -53,12 +46,10 @@ export async function updateGroupSchedule(groupId: string, scheduleData: any) {
   }
 }
 
-/**
- * Deletes a group by its ID
- */
+
 export async function deleteGroup(groupId: string) {
   try {
-    await connectDB();
+    await dbConnect();
     await Group.findByIdAndDelete(groupId);
     revalidatePath('/groups'); // Refresh the UI immediately
     return { success: true };
@@ -68,12 +59,10 @@ export async function deleteGroup(groupId: string) {
   }
 }
 
-/**
- * Updates an existing group's details
- */
+
 export async function updateGroup(groupId: string, formData: any) {
   try {
-    await connectDB();
+    await dbConnect();
     await Group.findByIdAndUpdate(groupId, formData);
     revalidatePath('/groups');
     return { success: true };
@@ -82,3 +71,4 @@ export async function updateGroup(groupId: string, formData: any) {
     return { success: false };
   }
 }
+

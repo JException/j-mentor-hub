@@ -23,23 +23,34 @@ export default function GroupsPage() {
   }, []);
 
   const saveGroup = async () => {
-    if (!formData.groupName || !formData.thesisTitle) {
-      alert("Please fill in the Group Name and Thesis Title.");
-      return;
-    }
+  if (!formData.groupName || !formData.thesisTitle) {
+    alert("Please fill in the Group Name and Thesis Title.");
+    return;
+  }
 
-    try {
-      const result = await saveGroupToDB(formData);
-      if (result.success) {
-        const updatedData = await getGroupsFromDB();
-        setGroups(updatedData);
-        setFormData({ groupName: '', thesisTitle: '', members: ['', '', '', ''], projectManager: '' });
-        setIsEditing(null);
-      }
-    } catch (error) {
-      console.error("Save Error:", error);
-    }
+  // CREATE THE DATA OBJECT TO MATCH THE DATABASE SCHEMA
+  const dataToSave = {
+    groupName: formData.groupName,
+    thesisTitle: formData.thesisTitle,
+    members: formData.members.filter(m => m !== ""), // Cleans up empty member boxes
+    assignPM: formData.projectManager // THIS MAPS projectManager TO assignPM
   };
+
+  try {
+    const result = await saveGroupToDB(dataToSave); 
+    if (result.success) {
+      // Refresh the list and clear the form
+      const updatedData = await getGroupsFromDB();
+      setGroups(updatedData);
+      setFormData({ groupName: '', thesisTitle: '', members: ['', '', '', ''], projectManager: '' });
+      setIsEditing(null);
+    } else {
+      alert("Save failed: " + result.error);
+    }
+  } catch (error) {
+    console.error("Save Error:", error);
+  }
+};
 
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -116,8 +127,8 @@ export default function GroupsPage() {
       {/* RESTORED DATA LIST */}
       <div className="grid gap-6 pb-20">
         {groups.map((g, i) => (
-          <div key={i} className="bg-white p-10 rounded-[40px] border border-slate-200 flex flex-col md:flex-row items-center justify-between group hover:shadow-2xl transition-all">
-            <div className="flex items-center gap-10">
+         <div key={i} className="bg-white p-10 rounded-[40px] border border-slate-200 flex flex-col md:flex-row items-center justify-between group hover:bg-slate-100 hover:border-slate-400 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-pointer">
+         <div className="flex items-center gap-10">
               <div className="h-20 w-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center text-2xl font-black">
                 {g.groupName ? g.groupName.substring(0,2).toUpperCase() : '??'}
               </div>
@@ -125,11 +136,16 @@ export default function GroupsPage() {
                 <h3 className="text-3xl font-bold tracking-tight text-slate-800">{g.groupName}</h3>
                 <p className="text-slate-400 font-medium italic text-lg leading-tight mb-4">{g.thesisTitle}</p>
                 <div className="flex flex-wrap gap-2">
-                  {g.members?.filter((m:any) => m).map((m:any, mi:number) => (
-                    <span key={mi} className={`text-[10px] px-4 py-1.5 rounded-full font-black uppercase tracking-widest ${m === g.projectManager ? 'bg-amber-100 text-amber-600 border border-amber-200' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
-                      {m === g.projectManager && '👑 '}{m}
+                 {g.members?.filter((m: any) => m).map((m: any, mi: number) => (
+                    <span 
+                      key={mi} 
+                      className={`text-[10px] px-4 py-1.5 rounded-full font-black uppercase tracking-widest 
+                        ${m === g.assignPM ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-50 text-slate-400'}`}
+                    >
+                      {m === g.assignPM && '👑 '} {m}
                     </span>
                   ))}
+
                 </div>
               </div>
             </div>
