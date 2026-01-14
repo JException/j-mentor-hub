@@ -1,19 +1,23 @@
-import mongoose, { Schema, model, models } from 'mongoose';
+import mongoose, { Schema } from "mongoose";
 
-export const GroupSchema = new mongoose.Schema({
-  groupName: String,
-  thesisTitle: String,
+// 1. Force delete the old model from Mongoose's cache to ensure it reloads
+if (mongoose.models.Group) {
+  delete mongoose.models.Group;
+}
+
+const GroupSchema = new Schema({
+  groupName: { type: String, required: true },
+  thesisTitle: { type: String, required: true },
   members: [String],
   assignPM: String,
-  // This field stores the heatmap/parsed data
+  // Use Mixed to allow names like "David D. Grün"
   schedules: {
-    type: Map,
-    of: mongoose.Schema.Types.Mixed, 
+    type: Schema.Types.Mixed,
     default: {}
   }
-}, { timestamps: true });
+}, { 
+  timestamps: true,
+  minimize: false 
+});
 
-// THIS IS THE MISSING LINK:
-// We check if the 'Group' model already exists to prevent Next.js 
-// from trying to create it twice every time you save a file.
-export const Group = models.Group || model("Group", GroupSchema);
+export const Group = mongoose.model("Group", GroupSchema);

@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
     { name: 'Schedule Parser', path: '/parser', icon: Calendar },
     { name: 'Thesis Groups', path: '/groups', icon: Users },
-    { name: 'Leaderboards', path: '/leaderboards', icon: Medal },
+    { name: 'Leaderboards', path: '/leaderboards', icon: Medal }, // WIP - leaderboards
   ];
 
   return (
@@ -27,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="description" content="Manage thesis groups and schedules" />
       </head>
       {/* 1. Changed min-h-screen to h-screen to fix the height to exactly one window size */}
-      <body className="flex h-screen bg-[#f8fafc] text-slate-900 antialiased overflow-hidden">
+      <body className="flex h-screen bg-[#f8fafc] text-slate-900 antialiased overflow-hidden" suppressHydrationWarning>
         
         {/* SIDEBAR */}
         <aside 
