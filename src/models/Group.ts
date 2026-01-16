@@ -14,7 +14,9 @@ const GroupSchema = new Schema({
   schedules: {
     type: Schema.Types.Mixed,
     default: {}
-  }
+  },
+  isPinned: { type: Boolean, default: false }, 
+  createdAt: { type: Date, default: Date.now }
 }, { 
   timestamps: true,
   minimize: false 

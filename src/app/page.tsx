@@ -10,7 +10,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true); 
 
   // Fetch groups on load
-useEffect(() => {
+    useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       const data = await getGroupsFromDB(); // It returns an array directly
@@ -21,7 +21,6 @@ useEffect(() => {
   }, []);
 
   const getStatValue = (label: string) => {
-    // Now 'loading' is defined!
     if (loading) return "--"; 
     
     switch (label) {
@@ -30,8 +29,12 @@ useEffect(() => {
       case 'Synced Schedules': 
         // Checks if 'schedules' exists and isn't empty
         return groups.filter((g: any) => g.schedules && Object.keys(g.schedules).length > 0).length;
-      case 'Pending Files':
-        return "0";
+      case 'Number of Students':
+        // REDESIGNED: Flatten the members arrays and count non-empty strings
+        return groups.reduce((acc: number, g: any) => {
+          const validMembers = g.members?.filter((m: string) => m.trim() !== "") || [];
+          return acc + validMembers.length;
+        }, 0);
       case 'Rank':
         return "#1";
       default: 
@@ -51,7 +54,7 @@ useEffect(() => {
 
       {/* 2. STATS BAR */}
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {['Total Groups', 'Synced Schedules', 'Pending Files', 'Rank'].map((label, i) => (
+      {['Total Groups', 'Synced Schedules', 'Number of Students', 'Skibidi'].map((label, i) => (
         <div key={i} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
           <p className="text-xl font-black text-slate-800">

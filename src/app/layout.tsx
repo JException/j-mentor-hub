@@ -6,7 +6,8 @@ import Link from 'next/link';
 import "./globals.css"; 
 import { 
   Users, Calendar, LayoutDashboard, ChevronLeft, ChevronRight, GraduationCap, 
-  Medal
+  Medal,
+  List
 } from 'lucide-react';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     { name: 'Schedule Parser', path: '/parser', icon: Calendar },
     { name: 'Thesis Groups', path: '/groups', icon: Users },
     { name: 'Leaderboards', path: '/leaderboards', icon: Medal }, // WIP - leaderboards
+    { name: 'Masterlist', path: '/masterlist', icon: List },
   ];
 
   return (
