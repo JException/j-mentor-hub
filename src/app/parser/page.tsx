@@ -110,12 +110,19 @@ export default function CombinedGroupsAndParser() {
       if (parts.length >= 6 && parts[0] !== "Courses") {
         const dayArr = parts[4].split(' / ');
         const timeArr = parts[5].split(' / ');
-        dayArr.forEach((day, i) => {
+        // Change (day, i) to (dayRaw, i)
+        dayArr.forEach((dayRaw, i) => { 
+          let day = dayRaw.trim(); // Now dayRaw is defined!
+          
+          // Normalize 'TH' to 'H'
+          if (day === "TH" || day === "Th") day = "H"; 
+
           const timeRange = timeArr[i] || timeArr[0];
           const [start, end] = timeRange.split('-');
+          
           if (start && end) {
             schedule.push({ 
-              day: day.trim(), 
+              day: day, 
               start: timeToMin(start), 
               end: timeToMin(end), 
               title: parts[1] 

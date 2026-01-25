@@ -2,8 +2,9 @@
 import { dbConnect } from "@/lib/db";
 import { Group } from "@/models/Group";
 import { revalidatePath } from "next/cache";
-// Fix: Import ObjectId to resolve the ReferenceError
 import { ObjectId } from "mongodb"; 
+import clientPromise from "@/lib/mongodb"; 
+import Task from "@/models/Task";
 
 export async function saveGroupToDB(formData: any) {
   try {
@@ -100,5 +101,76 @@ export async function updateGroup(groupId: string, formData: any) {
   } catch (error) {
     console.error("Update failed:", error);
     return { success: false };
+  }
+}
+
+export async function getTasks() {
+  try {
+    await dbConnect(); // Use the same connection as Groups
+    
+    // Find all tasks
+    const tasks = await Task.find({}).sort({ createdAt: -1 });
+
+    // Convert Mongoose documents to plain objects for the frontend
+    return tasks.map(task => ({
+      id: task._id.toString(), // Convert ObjectId to string
+      name: task.name,
+      deadline: task.deadline,
+      type: task.type
+    }));
+  } catch (error) {
+    console.error("Failed to fetch tasks:", error);
+    return [];
+  }
+}
+
+export async function createTask(data: any) {
+  try {
+    await dbConnect(); // Ensure DB is connected
+
+    // Create directly using the Model
+    const newTask = await Task.create({
+      name: data.name,
+      deadline: data.deadline,
+      type: data.type
+    });
+
+    revalidatePath('/deliverables');
+    
+    // Return the new ID so the UI can update immediately
+    return { success: true, newId: newTask._id.toString() };
+  } catch (error) {
+    console.error("Failed to create task:", error);
+    return { success: false, error: 'Database Error' };
+  }
+}
+
+export async function deleteTask(taskId: string) {
+  try {
+    await dbConnect();
+    
+    // Mongoose handles the string-to-ObjectId conversion automatically here
+    await Task.findByIdAndDelete(taskId);
+    
+    revalidatePath("/deliverables");
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to delete task:", error);
+    return { success: false, error };
+  }
+}
+
+export async function updateTask(id: string, data: any) {
+  try {
+    await dbConnect();
+    await Task.findByIdAndUpdate(id, {
+      name: data.name,
+      deadline: data.deadline,
+      type: data.type
+    });
+    revalidatePath('/deliverables');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error };
   }
 }
