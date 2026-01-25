@@ -1,7 +1,9 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-// Changed PushPin to Pin as PushPin does not exist in lucide-react
-import { Save, Trash2, Pin, Edit3, X, Users, Crown } from 'lucide-react'; 
+import { 
+  Save, Trash2, Pin, Edit3, X, Users, Crown, 
+  GraduationCap, LayoutGrid, CalendarClock, Clock
+} from 'lucide-react'; 
 import { saveGroupToDB, getGroupsFromDB, deleteGroup, updateGroup, togglePinGroup } from "@/app/actions";
 import { useRouter } from 'next/navigation';
 
@@ -12,12 +14,54 @@ export default function GroupsPage() {
   const router = useRouter();
   const [sortBy, setSortBy] = useState<'newest' | 'alphabetical' | 'group'>('newest');
 
-  // FORM STATE
-  const [formData, setFormData] = useState({
+  // --- CONSTANTS ---
+  const SECTION_OPTIONS = [
+    "TN31", "TN32", "TN33", "TN34", "TN35", 
+    "TN36", "TN37", "TN38", "TN39", "TN310", "TS31"
+  ];
+
+  const ADVISER_OPTIONS = [
+    "Dr. Beau Gray Habal",
+    "Dr. Angelo Arguson",
+    "Dr. Hadji Tejuco",
+    "Dr. Hazel Patilano",
+    "Ms. Elisa Malasaga"
+  ];
+
+  const DAYS_OPTIONS = [
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+  ];
+
+  // Generate 1-hour intervals from 7 AM to 8 PM
+  const TIME_OPTIONS = [
+    "07:00 AM", "08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM",
+    "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", 
+    "07:00 PM", "08:00 PM"
+  ];
+
+  // --- FORM STATE ---
+  interface FormData {
+    groupName: string;
+    thesisTitle: string;
+    members: string[];
+    assignPM: string;
+    se2Adviser: string;    
+    pmAdviser: string;      
+    sections: string[];
+    consultationDay: string;
+    consultationTime: string;
+  }
+
+  const [formData, setFormData] = useState<FormData>({
     groupName: '', 
     thesisTitle: '', 
     members: ['', '', '', ''], 
-    assignPM: ''
+    assignPM: '',
+    se2Adviser: '',    
+    pmAdviser: '',     
+    sections: [],
+    consultationDay: '',
+    consultationTime: ''
   });
 
   // DATA LOADING
@@ -32,13 +76,9 @@ export default function GroupsPage() {
 
   // PIN TOGGLE
   const handleTogglePin = async (id: string, status: boolean) => {
-    const result = await togglePinGroup(id, status);
-        if (result.success) {
-          await loadData(); // This is critical to see the change!
-        }
     try {
       await togglePinGroup(id, status);
-      await loadData(); // Refresh list after database update
+      await loadData(); 
     } catch (error) {
       console.error("Pin Error:", error);
     }
@@ -67,13 +107,28 @@ export default function GroupsPage() {
 
   const handleEdit = (g: any) => {
     setIsEditing(g._id);
+    
+    // SAFETY CHECK: Ensure sections is always an array
+    let safeSections: string[] = [];
+    if (Array.isArray(g.sections)) {
+      safeSections = g.sections;
+    } else if (typeof g.sections === 'string') {
+      // @ts-ignore - Handle legacy string data safely
+      safeSections = g.sections.split(','); 
+    }
+
     setFormData({
       groupName: g.groupName,
       thesisTitle: g.thesisTitle,
       members: Array.isArray(g.members) 
         ? [...g.members, "", "", "", ""].slice(0, 4) 
         : ['', '', '', ''],
-      assignPM: g.assignPM || ''
+      assignPM: g.assignPM || '',
+      se2Adviser: g.se2Adviser || '',
+      pmAdviser: g.pmAdviser || '',
+      sections: safeSections, 
+      consultationDay: g.consultationDay || '', 
+      consultationTime: g.consultationTime || '' 
     });
 
     const element = document.getElementById('form-top');
@@ -89,10 +144,11 @@ export default function GroupsPage() {
     }
 
     setIsSaving(true);
+    
     const dataToSave = {
       ...formData,
       members: formData.members.filter(m => m.trim() !== ""),
-      createdAt: isEditing ? undefined : new Date().toISOString() // Tracking for 'Newest' sort
+      createdAt: isEditing ? undefined : new Date().toISOString() 
     };
 
     try {
@@ -102,7 +158,12 @@ export default function GroupsPage() {
 
       if (result.success) {
         await loadData();
-        setFormData({ groupName: '', thesisTitle: '', members: ['', '', '', ''], assignPM: '' });
+        // Reset Form
+        setFormData({ 
+            groupName: '', thesisTitle: '', members: ['', '', '', ''], assignPM: '', 
+            se2Adviser: '', pmAdviser: '', sections: [], 
+            consultationDay: '', consultationTime: '' 
+        });
         setIsEditing(null);
       }
     } catch (error) {
@@ -124,7 +185,7 @@ export default function GroupsPage() {
         <h1 className="text-6xl font-medium tracking-tight text-slate-800">
           Thesis <span className="text-slate-300 italic">Groups</span>
         </h1>
-        <p className="text-slate-500 mt-2 font-medium">Manage active mentoring groups and thesis titles.</p>
+        <p className="text-slate-500 mt-2 font-medium">Manage active mentoring groups, advisers, and sections.</p>
       </header>
 
       {/* FORM SECTION */}
@@ -137,7 +198,10 @@ export default function GroupsPage() {
             <button 
               onClick={() => {
                 setIsEditing(null); 
-                setFormData({groupName:'', thesisTitle:'', members:['','','',''], assignPM:''});
+                setFormData({
+                    groupName:'', thesisTitle:'', members:['','','',''], assignPM:'', 
+                    se2Adviser:'', pmAdviser:'', sections:[], consultationDay: '', consultationTime: ''
+                });
               }} 
               className="text-red-500 flex items-center gap-2 text-xs font-black uppercase tracking-widest hover:bg-red-50 p-2 rounded-xl transition-all"
             >
@@ -146,8 +210,9 @@ export default function GroupsPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
+        {/* Row 1: Basic Info */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+          <div className="md:col-span-5 space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-2">Group Name</label>
             <input 
               className="w-full bg-slate-50 border border-slate-100 p-5 rounded-3xl outline-none focus:border-blue-500 transition-all font-bold"
@@ -156,7 +221,7 @@ export default function GroupsPage() {
               placeholder="e.g. Group Alpha"
             />
           </div>
-          <div className="space-y-2">
+          <div className="md:col-span-7 space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-2">Thesis Title</label>
             <input 
               className="w-full bg-slate-50 border border-slate-100 p-5 rounded-3xl outline-none focus:border-blue-500 transition-all font-medium italic"
@@ -167,7 +232,118 @@ export default function GroupsPage() {
           </div>
         </div>
 
-        <div className="space-y-4">
+        {/* --- SECTIONS (Multi-select Tags) --- */}
+        <div className="mb-4">
+          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+            Sections (Select all that apply)
+          </label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {Array.isArray(formData.sections) && formData.sections.map((sec) => (
+              <span key={sec} className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium flex items-center">
+                {sec}
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({...prev, sections: prev.sections.filter(s => s !== sec)}))}
+                  className="ml-2 hover:text-blue-900"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {SECTION_OPTIONS.map((option) => {
+              const isSelected = Array.isArray(formData.sections) && formData.sections.includes(option);
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setFormData(prev => {
+                    const current = Array.isArray(prev.sections) ? prev.sections : [];
+                    const updated = current.includes(option) ? current.filter(s => s !== option) : [...current, option];
+                    return { ...prev, sections: updated };
+                  })}
+                  className={`px-3 py-1 text-xs rounded-md border transition-colors ${
+                    isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                  }`}
+                >
+                  {isSelected ? `✓ ${option}` : option}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* --- ADVISERS & CONSULTATION ROW --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Advisers Column */}
+            <div className="space-y-4">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <GraduationCap size={16} className="text-blue-500"/> Advisers
+                </h3>
+                <div className="space-y-3">
+                    <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">SE II Professor</label>
+                        <select
+                        value={formData.se2Adviser}
+                        onChange={(e) => setFormData({ ...formData, se2Adviser: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-700 p-3 rounded-xl focus:outline-none focus:border-blue-500 text-sm font-bold"
+                        >
+                        <option value="">Select Professor...</option>
+                        {ADVISER_OPTIONS.map((name) => <option key={name} value={name}>{name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">PM Professor</label>
+                        <select
+                        value={formData.pmAdviser}
+                        onChange={(e) => setFormData({ ...formData, pmAdviser: e.target.value })}
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-700 p-3 rounded-xl focus:outline-none focus:border-blue-500 text-sm font-bold"
+                        >
+                        <option value="">Select Professor...</option>
+                        {ADVISER_OPTIONS.map((name) => <option key={name} value={name}>{name}</option>)}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            {/* NEW: Consultation Schedule Column */}
+            <div className="space-y-4">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <CalendarClock size={16} className="text-amber-500"/> Consultation Schedule
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Day</label>
+                        <select
+                            value={formData.consultationDay}
+                            onChange={(e) => setFormData({ ...formData, consultationDay: e.target.value })}
+                            className="w-full bg-amber-50 border border-amber-100 text-amber-900 p-3 rounded-xl focus:outline-none focus:border-amber-400 text-sm font-bold"
+                        >
+                        <option value="">Select Day</option>
+                        {DAYS_OPTIONS.map((day) => <option key={day} value={day}>{day}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Time</label>
+                        <select
+                            value={formData.consultationTime}
+                            onChange={(e) => setFormData({ ...formData, consultationTime: e.target.value })}
+                            className="w-full bg-amber-50 border border-amber-100 text-amber-900 p-3 rounded-xl focus:outline-none focus:border-amber-400 text-sm font-bold"
+                        >
+                        <option value="">Select Time</option>
+                        {TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}
+                        </select>
+                    </div>
+                </div>
+                <p className="text-[10px] text-slate-400 italic">
+                    * Schedule is set for weekly recurring consultations.
+                </p>
+            </div>
+        </div>
+
+        {/* Row 3: Members */}
+        <div className="space-y-4 pt-4 border-t border-slate-100">
           <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-2">Team Members</label>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             {formData.members.map((m, i) => (
@@ -182,7 +358,7 @@ export default function GroupsPage() {
           </div>
         </div>
         
-        <div className="flex flex-col md:flex-row justify-between items-center gap-6 border-t border-slate-50 pt-8">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-6 pt-4">
           <div className="flex items-center gap-4">
             <div className="bg-amber-100 text-amber-600 p-3 rounded-2xl"><Crown size={20} /></div>
             <div className="flex flex-col">
@@ -235,31 +411,45 @@ export default function GroupsPage() {
           >
             <div>
               <div className="flex justify-between items-start mb-6">
-                <div className="h-14 w-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black text-lg
-                                transition-all duration-300 group-hover/card:bg-blue-600 group-hover/card:scale-110 group-hover/card:shadow-[0_0_20px_rgba(37,99,235,0.4)]">
-                  {group.groupName?.substring(0, 2).toUpperCase()}
+                <div className="flex items-center gap-3">
+                      <div className="h-14 w-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black text-lg
+                                                  transition-all duration-300 group-hover/card:bg-blue-600 group-hover/card:scale-110 group-hover/card:shadow-[0_0_20px_rgba(37,99,235,0.4)]">
+                        {group.groupName?.substring(0, 2).toUpperCase()}
+                    </div>
+                    
+                    {/* TOP LEFT: Sections (Restored) */}
+                    <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Section</span>
+                        <div className="flex flex-wrap gap-1">
+                            {group.sections && group.sections.length > 0 ? (
+                                // 👇 FIXED: Added explicit types to the map arguments
+                                group.sections.map((section: string, index: number) => (
+                                    <span 
+                                        key={index} 
+                                        className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md text-[10px] font-bold border border-slate-200"
+                                    >
+                                        {section}
+                                    </span>
+                                ))
+                            ) : (
+                                <span className="text-slate-400 text-[10px] italic">No Section</span>
+                            )}
+                        </div>
+                    </div>
+                
                 </div>
                 
                 <div className="flex gap-2 relative z-10">
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleTogglePin(group._id, group.isPinned); }}
                     className={`p-3 rounded-xl transition-all ${group.isPinned ? 'bg-amber-100 text-amber-600 shadow-sm' : 'bg-slate-50 text-slate-300 hover:text-amber-600 hover:bg-amber-50'}`}
-                    title={group.isPinned ? "Unpin" : "Pin to top"}
                   >
                     <Pin size={18} className={group.isPinned ? "fill-current" : "-rotate-45"} />
                   </button>
-
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleEdit(group); }} 
-                    className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                  >
+                  <button onClick={(e) => { e.stopPropagation(); handleEdit(group); }} className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
                     <Edit3 size={18}/>
                   </button>
-
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleDelete(group._id); }} 
-                    className="p-3 bg-slate-50 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                  >
+                  <button onClick={(e) => { e.stopPropagation(); handleDelete(group._id); }} className="p-3 bg-slate-50 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
                     <Trash2 size={18}/>
                   </button>
                 </div>
@@ -273,7 +463,20 @@ export default function GroupsPage() {
                 "{group.thesisTitle}"
               </p>
 
-              <div className="flex flex-wrap gap-2">
+              {/* Advisers Display */}
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">SE2 Adviser</p>
+                    <p className="text-xs font-bold text-slate-700 truncate">{group.se2Adviser || "—"}</p>
+                 </div>
+                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">PM Adviser</p>
+                    <p className="text-xs font-bold text-slate-700 truncate">{group.pmAdviser || "—"}</p>
+                 </div>
+              </div>
+
+              {/* Members Display */}
+              <div className="flex flex-wrap gap-2 mb-4">
                 {group.members.map((m: any, i: number) => (
                   <span key={i} className={`text-[10px] px-3 py-1.5 rounded-full font-bold uppercase tracking-tight border transition-all ${
                     m === group.assignPM 
@@ -284,6 +487,22 @@ export default function GroupsPage() {
                   </span>
                 ))}
               </div>
+
+              {/* BOTTOM: CONSULTATION TIME */}
+              <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                    <div className="bg-amber-100 p-1.5 rounded-lg text-amber-600">
+                        <Clock size={14} />
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Consultation Time</span>
+                        <span className="text-xs font-bold text-slate-700">
+                            {group.consultationDay || "Day Unset"} @ {group.consultationTime || "Time Unset"}
+                        </span>
+                    </div>
+                </div>
+              </div>
+
             </div>
           </div>
         ))}

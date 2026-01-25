@@ -2,20 +2,77 @@
 import { dbConnect } from "@/lib/db";
 import { Group } from "@/models/Group";
 import { revalidatePath } from "next/cache";
-import { ObjectId } from "mongodb"; 
-import clientPromise from "@/lib/mongodb"; 
 import Task from "@/models/Task";
+import Progress from '@/models/Progress';
 
-export async function saveGroupToDB(formData: any) {
+// --- DEFINING THE INTERFACE ---
+export interface GroupData {
+  _id?: string;
+  groupName: string;
+  thesisTitle: string;
+  members: string[];
+  assignPM?: string;
+  // New fields
+  sections?: string[]; 
+  se2Adviser?: string;
+  pmAdviser?: string;
+  consultationDay?: string;
+  consultationTime?: string;
+  // End new fields
+  isPinned?: boolean;
+  createdAt?: string;
+}
+export async function getLeaderboardData() {
+  await dbConnect();
+  
+  const groups = await Group.find({}).lean();
+  const tasks = await Task.find({}).sort({ deadline: 1 }).lean(); 
+  const progress = await Progress.find({}).lean();
+
+  return {
+    groups: JSON.parse(JSON.stringify(groups)),
+    tasks: JSON.parse(JSON.stringify(tasks)),
+    progress: JSON.parse(JSON.stringify(progress))
+  };
+}
+
+export async function updateGroupProgress(groupId: string, taskId: string, status: string) {
   try {
     await dbConnect();
-    // Ensure new groups have default values for pinning and sorting
-    const newGroup = {
-      ...formData,
+    await Progress.findOneAndUpdate(
+      { groupId, taskId },
+      { status, lastUpdated: new Date() },
+      { upsert: true, new: true }
+    );
+    return { success: true };
+  } catch (error) {
+    console.error("Update failed", error);
+    return { success: false };
+  }
+}
+
+export async function saveGroupToDB(formData: GroupData) {
+  try {
+    await dbConnect();
+    
+    // We explicitly map the fields to ensure nothing is missed
+    const newGroup = await Group.create({
+      groupName: formData.groupName,
+      thesisTitle: formData.thesisTitle,
+      members: formData.members,
+      sections: formData.sections,
+      assignPM: formData.assignPM,
+      se2Adviser: formData.se2Adviser,
+      pmAdviser: formData.pmAdviser,
+      
+      // 👇 Explicitly saving the schedule
+      consultationDay: formData.consultationDay,
+      consultationTime: formData.consultationTime,
+
       isPinned: false,
       createdAt: new Date().toISOString()
-    };
-    await Group.create(newGroup);
+    });
+    
     revalidatePath('/groups'); 
     return { success: true };
   } catch (error) {
@@ -26,9 +83,7 @@ export async function saveGroupToDB(formData: any) {
 
 export async function togglePinGroup(groupId: string, currentStatus: boolean) {
   try {
-    await dbConnect(); // Use your existing Mongoose connection
-    
-    // Use Mongoose to update the group
+    await dbConnect(); 
     await Group.findByIdAndUpdate(
       groupId, 
       { isPinned: !currentStatus }
@@ -55,6 +110,7 @@ export async function getGroupsFromDB() {
 }
 
 const sanitizeKey = (key: string) => key.replace(/\./g, ' ');
+
 export async function updateGroupSchedule(groupId: string, scheduleData: any) {
   try {
     await dbConnect();
@@ -92,9 +148,10 @@ export async function deleteGroup(groupId: string) {
   }
 }
 
-export async function updateGroup(groupId: string, formData: any) {
+export async function updateGroup(groupId: string, formData: GroupData) {
   try {
     await dbConnect();
+    // This will update whatever fields are passed in formData
     await Group.findByIdAndUpdate(groupId, formData);
     revalidatePath('/groups');
     return { success: true };
@@ -106,14 +163,11 @@ export async function updateGroup(groupId: string, formData: any) {
 
 export async function getTasks() {
   try {
-    await dbConnect(); // Use the same connection as Groups
-    
-    // Find all tasks
+    await dbConnect(); 
     const tasks = await Task.find({}).sort({ createdAt: -1 });
 
-    // Convert Mongoose documents to plain objects for the frontend
     return tasks.map(task => ({
-      id: task._id.toString(), // Convert ObjectId to string
+      id: task._id.toString(), 
       name: task.name,
       deadline: task.deadline,
       type: task.type
@@ -126,9 +180,7 @@ export async function getTasks() {
 
 export async function createTask(data: any) {
   try {
-    await dbConnect(); // Ensure DB is connected
-
-    // Create directly using the Model
+    await dbConnect(); 
     const newTask = await Task.create({
       name: data.name,
       deadline: data.deadline,
@@ -136,8 +188,6 @@ export async function createTask(data: any) {
     });
 
     revalidatePath('/deliverables');
-    
-    // Return the new ID so the UI can update immediately
     return { success: true, newId: newTask._id.toString() };
   } catch (error) {
     console.error("Failed to create task:", error);
@@ -148,10 +198,7 @@ export async function createTask(data: any) {
 export async function deleteTask(taskId: string) {
   try {
     await dbConnect();
-    
-    // Mongoose handles the string-to-ObjectId conversion automatically here
     await Task.findByIdAndDelete(taskId);
-    
     revalidatePath("/deliverables");
     return { success: true };
   } catch (error) {
@@ -172,5 +219,22 @@ export async function updateTask(id: string, data: any) {
     return { success: true };
   } catch (error) {
     return { success: false, error };
+  }
+}
+
+export async function getDeliverablesFromDB() {
+  try {
+    await dbConnect();
+    const tasks = await Task.find({}).sort({ deadline: 1 }).lean();
+
+    return tasks.map((task: any) => ({
+      id: task._id.toString(),
+      taskName: task.name,      
+      deadline: task.deadline,
+      type: task.type
+    }));
+  } catch (error) {
+    console.error("Failed to fetch deliverables:", error);
+    return [];
   }
 }

@@ -10,7 +10,16 @@ const GroupSchema = new Schema({
   thesisTitle: { type: String, required: true },
   members: [String],
   assignPM: String,
-  // Use Mixed to allow names like "David D. Grün"
+
+// --- NEW FIELDS ADDED HERE ---
+  sections: { type: [String], default: [] }, // Stores ["TN31", "TN32"]
+  se2Adviser: { type: String, default: "" },
+  pmAdviser: { type: String, default: "" },
+  // ------------------
+  consultationDay: { type: String, default: "" },
+  consultationTime: { type: String, default: "" },
+  
+
   schedules: {
     type: Schema.Types.Mixed,
     default: {}
