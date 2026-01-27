@@ -1,8 +1,10 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { getLeaderboardData, getDeliverablesFromDB } from "@/app/actions"; 
-// Added Moon and Sun icons for the switch
-import { ArrowRight, Star, Clock, Trophy, Calendar, Users, Moon, Sun, Menu } from 'lucide-react';
+import { 
+  ArrowRight, Clock, Trophy, Calendar, Users, Moon, Sun, 
+  CheckCircle2, CircleDashed, CheckSquare // Added icons for the tooltip
+} from 'lucide-react';
 import Link from 'next/link';
 
 // --- HELPER: Calculate next specific date AND TIME ---
@@ -42,16 +44,24 @@ export default function DashboardPage() {
   const [topGroups, setTopGroups] = useState<any[]>([]); 
   const [deliverables, setDeliverables] = useState<any[]>([]);
   const [consultations, setConsultations] = useState<any[]>([]); 
-  const [stats, setStats] = useState({ totalGroups: 0, synced: 0, students: 0, accumulatedScore: 0 });
-  const [loading, setLoading] = useState(true);
   
-  // --- NIGHT MODE STATE ---
-  // Initialize from localStorage if available, otherwise false
+  // --- UPDATED STATS STATE to include breakdowns for the tooltip ---
+  const [stats, setStats] = useState({ 
+    totalGroups: 0, 
+    synced: 0, 
+    students: 0, 
+    accumulatedScore: 0,
+    maxPossibleScore: 0, // New
+    tasksDone: 0,        // New
+    tasksOngoing: 0,     // New
+    tasksNotStarted: 0   // New
+  });
+
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState("");
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // --- EFFECT: HANDLE DARK MODE ---
   useEffect(() => {
-    // Check system preference or localStorage on mount
     const savedMode = localStorage.getItem('darkMode') === 'true';
     setIsDarkMode(savedMode);
     if (savedMode) {
@@ -63,12 +73,8 @@ export default function DashboardPage() {
     const newMode = !isDarkMode;
     setIsDarkMode(newMode);
     localStorage.setItem('darkMode', newMode.toString());
-    
-    if (newMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    if (newMode) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
   };
 
   useEffect(() => {
@@ -77,8 +83,11 @@ export default function DashboardPage() {
       
       try {
         const lbData = await getLeaderboardData();
-        const { groups = [], tasks = [], progress = [] } = lbData || {};
+        const tasksData = await getDeliverablesFromDB(); // Fetch tasks early to use in calculation
 
+        const { groups = [], progress = [] } = lbData || {};
+
+        // 1. Calculate Individual Group Scores
         const groupsWithScores = groups.map((group: any) => {
           const groupId = group._id.toString();
           const groupProgress = progress.filter((p: any) => p.groupId === groupId);
@@ -90,29 +99,26 @@ export default function DashboardPage() {
           return { ...group, totalScore: score };
         });
 
+        // 2. Sort for Leaderboard
         const sorted = groupsWithScores.sort((a: any, b: any) => {
           if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
           return a.groupName.localeCompare(b.groupName);
         });
-
         setTopGroups(sorted.slice(0, 4)); 
 
-        // Sort consultations
+        // 3. Process Schedule
         const upcomingConsultations = groups
           .map((group: any) => {
             const day = group.schedules?.day || group.consultationDay; 
             const time = group.schedules?.time || group.consultationTime;
-
             if (!day || !time) return null;
-
             const nextDate = getNextOccurrence(day, time);
-            
             return {
               groupName: group.groupName,
               nextDate: nextDate,
               dayDisplay: day,
               timeDisplay: time,
-              adviser: group.adviser || "TBA"
+              adviser: group.adviser || "iCare Office"
             };
           })
           .filter((item: any) => item !== null && item.nextDate !== null)
@@ -120,19 +126,43 @@ export default function DashboardPage() {
 
         setConsultations(upcomingConsultations);
 
+        // 4. --- NEW LOGIC: Calculate Max Score & Task Breakdowns ---
         const totalSystemScore = groupsWithScores.reduce((acc: number, group: any) => acc + group.totalScore, 0);
+        
+        // Calculate Max Possible Score based on Deadlines
+        const today = new Date();
+        const pastTasks = (tasksData || []).filter((t: any) => new Date(t.deadline) <= today);
+        
+        // Assume standard points (e.g., 10 pts per task) if not defined in DB
+        const maxPointsPerGroupSoFar = pastTasks.reduce((acc: number, t: any) => acc + (t.points || 10), 0);
+        const maxSystemScore = maxPointsPerGroupSoFar * groups.length;
+
+        // Calculate Status Counts for Tooltip
+        let countDone = 0;
+        let countOngoing = 0;
+        progress.forEach((p: any) => {
+            if (p.status === 'Done') countDone++;
+            if (p.status === 'In Progress') countOngoing++;
+        });
+
+        // "Not Started" is roughly: (Total Groups * Total Tasks Issued) - (Done + Ongoing)
+        const totalExpected = groups.length * pastTasks.length;
+        const countNotStarted = Math.max(0, totalExpected - (countDone + countOngoing));
 
         setStats({
           totalGroups: groups.length,
           synced: upcomingConsultations.length, 
           students: groups.reduce((acc: number, g: any) => acc + (g.members?.length || 0), 0),
-          accumulatedScore: totalSystemScore
+          accumulatedScore: totalSystemScore,
+          maxPossibleScore: maxSystemScore,
+          tasksDone: countDone,
+          tasksOngoing: countOngoing,
+          tasksNotStarted: countNotStarted
         });
 
-        const tasksData = await getDeliverablesFromDB(); 
-        const today = new Date().toISOString().split('T')[0];
+        // 5. Set Deliverables List
         const upcoming = (tasksData || [])
-          .filter((t: any) => t.deadline >= today)
+          .filter((t: any) => t.deadline >= today.toISOString().split('T')[0])
           .sort((a: any, b: any) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
           .slice(0, 3);
           
@@ -141,7 +171,10 @@ export default function DashboardPage() {
       } catch (e) {
         console.error("Error loading dashboard data", e);
       } finally {
-        setLoading(false);
+         setLoading(false);
+         setLastUpdated(new Date().toLocaleString('en-US', { 
+         month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric', hour12: true 
+  }));
       }
     };
     loadData();
@@ -153,19 +186,19 @@ export default function DashboardPage() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  // Calculate Progress Bar Percentage
+  const progressPercentage = stats.maxPossibleScore > 0 
+    ? Math.min(100, Math.round((stats.accumulatedScore / stats.maxPossibleScore) * 100)) 
+    : 0;
+
   return (
-    // Added dark:bg-slate-950 for the main background
     <div className="min-h-screen transition-colors duration-300 dark:bg-slate-950">
       
-      {/* RESPONSIVE CONTAINER:
-         - changed p-8 to p-4 for mobile, md:p-8 for desktop 
-      */}
       <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8">
         
         {/* HEADER */}
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
-            {/* UPDATED TITLE HERE */}
             <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-slate-800 dark:text-white">
               JJCP Mentorship Hub <span className="text-blue-600">3.0</span>
             </h1>
@@ -173,8 +206,6 @@ export default function DashboardPage() {
                 Welcome back, Sir Pura. Manage your thesis groups.
             </p>
           </div>
-
-          {/* NIGHT MODE TOGGLE BUTTON */}
           <button 
             onClick={toggleDarkMode}
             className="self-start md:self-center flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-200 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
@@ -184,31 +215,96 @@ export default function DashboardPage() {
           </button>
         </header>
 
-        {/* STATS */}
-        {/* RESPONSIVE GRID: grid-cols-2 is fine for mobile, md:grid-cols-4 for desktop */}
+        {/* --- MODIFIED STATS GRID --- */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-          {[
-            { label: 'Total Groups', value: stats.totalGroups },
-            { label: 'Synced Schedules', value: stats.synced },
-            { label: 'Students', value: stats.students }, // Shortened label for mobile
-            { label: 'Total Score', value: stats.accumulatedScore }
-          ].map((stat, i) => (
-            <div key={i} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-colors">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{stat.label}</p>
-              <p className={`text-xl md:text-2xl font-black ${i === 3 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-800 dark:text-white'}`}>
-                  {loading ? "--" : stat.value}
-              </p>
+          
+          {/* Card 1: Groups */}
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-colors">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Groups</p>
+            <p className="text-xl md:text-2xl font-black text-slate-800 dark:text-white">
+                {loading ? "--" : stats.totalGroups}
+            </p>
+          </div>
+
+          {/* Card 2: Synced */}
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-colors">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Synced Schedules</p>
+            <p className="text-xl md:text-2xl font-black text-slate-800 dark:text-white">
+                {loading ? "--" : stats.synced}
+            </p>
+          </div>
+
+          {/* Card 3: Students */}
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-colors">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Students</p>
+            <p className="text-xl md:text-2xl font-black text-slate-800 dark:text-white">
+                {loading ? "--" : stats.students}
+            </p>
+          </div>
+
+          {/* Card 4: TOTAL SCORE (Modified with Progress Bar & Tooltip) */}
+          <div className="relative group bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all hover:shadow-md cursor-default">
+            <div className="flex justify-between items-start">
+               <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Score</p>
+                  <div className="flex items-baseline gap-1">
+                    <p className="text-xl md:text-2xl font-black text-blue-600 dark:text-blue-400">
+                        {loading ? "--" : stats.accumulatedScore}
+                    </p>
+                    <span className="text-xs font-bold text-slate-300 dark:text-slate-600">
+                        / {loading ? "--" : stats.maxPossibleScore}
+                    </span>
+                  </div>
+               </div>
             </div>
-          ))}
+
+            {/* PROGRESS BAR */}
+            <div className="mt-3 w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+               <div 
+                 className="h-full bg-blue-600 rounded-full transition-all duration-1000 ease-out"
+                 style={{ width: `${loading ? 0 : progressPercentage}%` }}
+               />
+            </div>
+
+            {/* HOVER TOOLTIP */}
+            <div className="absolute top-full right-0 mt-2 w-56 p-4 bg-slate-800 dark:bg-slate-700 text-white text-xs rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 translate-y-2 group-hover:translate-y-0 pointer-events-none group-hover:pointer-events-auto">
+               <div className="font-bold mb-2 border-b border-slate-600 pb-2 uppercase tracking-wider text-[10px]">
+                 Overall Progress
+               </div>
+               <div className="space-y-2">
+                 <div className="flex items-center justify-between text-emerald-400">
+                   <div className="flex items-center gap-2">
+                     <CheckCircle2 size={14} /> <span>Done</span>
+                   </div>
+                   <span className="font-bold">{stats.tasksDone}</span>
+                 </div>
+                 <div className="flex items-center justify-between text-amber-400">
+                   <div className="flex items-center gap-2">
+                     <CheckSquare size={14} /> <span>In Progress</span>
+                   </div>
+                   <span className="font-bold">{stats.tasksOngoing}</span>
+                 </div>
+                 <div className="flex items-center justify-between text-slate-400">
+                   <div className="flex items-center gap-2">
+                     <CircleDashed size={14} /> <span>Not Started</span>
+                   </div>
+                   <span className="font-bold">{stats.tasksNotStarted}</span>
+                 </div>
+               </div>
+               {/* Tiny Arrow */}
+               <div className="absolute -top-1 right-8 w-3 h-3 bg-slate-800 dark:bg-slate-700 transform rotate-45"></div>
+            </div>
+          </div>
+
         </div>
 
         {/* BENTO GRID */}
-        {/* RESPONSIVE GRID: grid-cols-1 for mobile, md:grid-cols-3 for desktop */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
           {/* CONSULTATION SCHEDULE */}
           <div className="md:col-span-2 bg-white dark:bg-slate-900 rounded-[30px] md:rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden flex flex-col transition-colors">
-             <div className="p-6 md:p-8 pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+             {/* Changed pb-4 to pb-0 to remove bottom padding */}
+              <div className="p-6 md:p-8 pb-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className="h-10 w-10 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center">
                       <Clock className="w-5 h-5" />
@@ -253,10 +349,10 @@ export default function DashboardPage() {
                   ))
                 ) : (
                   <div className="flex flex-col items-center justify-center py-10 text-center">
-                     <p className="text-slate-400 text-sm mb-4">No schedules synced yet.</p>
-                     <Link href="/parser" className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold text-sm">
+                      <p className="text-slate-400 text-sm mb-4">No schedules synced yet.</p>
+                      <Link href="/parser" className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold text-sm">
                         Run Schedule Parser
-                     </Link>
+                      </Link>
                   </div>
                 )}
              </div>
@@ -307,7 +403,16 @@ export default function DashboardPage() {
                   <div className="h-full flex items-center justify-center text-slate-500 text-sm">No rankings yet.</div>
               )}
             </div>
+            {/* ADD THIS SECTION */}
+            <div className="mt-auto pt-4 text-center z-10">
+              <p className="text-[10px] font-medium text-slate-500 uppercase tracking-widest">
+                Updated as of {loading ? "..." : lastUpdated}
+              </p>
+            </div>
+            {/* END OF NEW SECTION */}
+      
           </div>
+          
 
           {/* GROUP MANAGER */}
           <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between transition-colors">
@@ -336,15 +441,15 @@ export default function DashboardPage() {
             
             <div className="space-y-3 flex-1">
               {loading ? (
-                   <p className="text-blue-300 text-xs">Loading...</p>
+                    <p className="text-blue-300 text-xs">Loading...</p>
               ) : deliverables.length > 0 ? (
                   deliverables.map((task, i) => {
                       const [month, day] = formatDate(task.deadline).split(' ');
                       return (
                         <div key={i} className="flex items-center gap-3 bg-white/60 dark:bg-white/5 p-2.5 rounded-xl transition-colors">
                             <div className="flex flex-col items-center justify-center bg-blue-100 dark:bg-blue-900/50 px-3 py-2 rounded-lg min-w-[50px]">
-                                 <span className="text-[10px] font-bold text-blue-400 uppercase leading-none mb-0.5">{month}</span>
-                                 <span className="text-xl font-black text-blue-600 dark:text-blue-400 leading-none">{day}</span>
+                                  <span className="text-[10px] font-bold text-blue-400 uppercase leading-none mb-0.5">{month}</span>
+                                  <span className="text-xl font-black text-blue-600 dark:text-blue-400 leading-none">{day}</span>
                             </div>
                             <div className="flex flex-col overflow-hidden">
                                 <span className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{task.taskName}</span>

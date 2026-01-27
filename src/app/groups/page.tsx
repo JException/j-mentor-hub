@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Save, Trash2, Pin, Edit3, X, Users, Crown, 
-  GraduationCap, LayoutGrid, CalendarClock, Clock
+  GraduationCap, LayoutGrid, CalendarClock, Clock, Laptop, School
 } from 'lucide-react'; 
 import { saveGroupToDB, getGroupsFromDB, deleteGroup, updateGroup, togglePinGroup } from "@/app/actions";
 import { useRouter } from 'next/navigation';
@@ -27,6 +27,12 @@ export default function GroupsPage() {
     "Dr. Hazel Patilano",
     "Ms. Elisa Malasaga"
   ];
+
+  // ... existing constants ...
+
+  // --- NEW: DEFENSE MODE CONSTANTS ---
+  const ONLINE_PMS = ["Dr. Angelo Arguson", "Ms. Elisa Malasaga"];
+  const F2F_PMS = ["Dr. Hadji Tejuco", "Dr. Beau Gray Habal", "Dr. Hazel Patilano"];
 
   const DAYS_OPTIONS = [
     "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
@@ -401,112 +407,143 @@ export default function GroupsPage() {
 
       {/* GROUPS LIST */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {sortedGroups.map((group) => (
-          <div 
-            key={group._id} 
-            onClick={() => router.push(`/groups/${group._id}`)}
-            className={`bg-white p-8 rounded-[40px] border shadow-sm transition-all duration-300 ease-out cursor-pointer flex flex-col justify-between group/card
-                      hover:shadow-[0_20px_50px_rgba(59,130,246,0.15)] hover:-translate-y-2 
-                      ${group.isPinned ? 'border-amber-200 bg-amber-50/10' : 'border-slate-200 hover:border-blue-400'}`}
-          >
-            <div>
-              <div className="flex justify-between items-start mb-6">
-                <div className="flex items-center gap-3">
-                      <div className="h-14 w-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black text-lg
-                                                  transition-all duration-300 group-hover/card:bg-blue-600 group-hover/card:scale-110 group-hover/card:shadow-[0_0_20px_rgba(37,99,235,0.4)]">
-                        {group.groupName?.substring(0, 2).toUpperCase()}
-                    </div>
-                    
-                    {/* TOP LEFT: Sections (Restored) */}
-                    <div className="flex flex-col gap-1">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Section</span>
-                        <div className="flex flex-wrap gap-1">
-                            {group.sections && group.sections.length > 0 ? (
-                                // 👇 FIXED: Added explicit types to the map arguments
-                                group.sections.map((section: string, index: number) => (
-                                    <span 
-                                        key={index} 
-                                        className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md text-[10px] font-bold border border-slate-200"
-                                    >
-                                        {section}
-                                    </span>
-                                ))
-                            ) : (
-                                <span className="text-slate-400 text-[10px] italic">No Section</span>
-                            )}
+       
+       
+{sortedGroups.map((group) => {
+          // 1. Determine Defense Mode based on PM Adviser
+          const isOnline = ONLINE_PMS.includes(group.pmAdviser);
+          const isF2F = F2F_PMS.includes(group.pmAdviser);
+
+          // 2. Define Dynamic Styles
+          let cardClasses = "bg-white border-slate-200 hover:border-slate-400"; // Default
+          let statusBadge = null;
+
+          if (isOnline) {
+            cardClasses = "bg-yellow-50/50 border-yellow-200 hover:border-yellow-400 hover:shadow-yellow-100";
+            statusBadge = (
+              <span className="mb-4 inline-flex items-center gap-1.5 px-3 py-1 bg-yellow-100 text-yellow-700 text-[10px] font-black uppercase tracking-widest rounded-lg border border-yellow-200">
+                <Laptop size={10}/> Online Defense
+              </span>
+            );
+          } else if (isF2F) {
+            cardClasses = "bg-blue-50/50 border-blue-200 hover:border-blue-400 hover:shadow-blue-100";
+            statusBadge = (
+              <span className="mb-4 inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-700 text-[10px] font-black uppercase tracking-widest rounded-lg border border-blue-200">
+                <School size={10} /> Face-to-Face Defense
+              </span>
+            );
+          } else if (group.isPinned) {
+             // Fallback for pinned if no PM assigned yet
+             cardClasses = "border-amber-200 bg-amber-50/10";
+          }
+
+          return (
+            <div 
+              key={group._id} 
+              onClick={() => router.push(`/groups/${group._id}`)}
+              className={`p-8 rounded-[40px] border shadow-sm transition-all duration-300 ease-out cursor-pointer flex flex-col justify-between group/card
+                        hover:shadow-[0_20px_50px_rgba(0,0,0,0.05)] hover:-translate-y-2 
+                        ${cardClasses}`}
+            >
+              <div>
+                {/* NEW: Status Badge Display */}
+                {statusBadge}
+
+                <div className="flex justify-between items-start mb-6">
+                  <div className="flex items-center gap-3">
+                        <div className={`h-14 w-14 text-white rounded-2xl flex items-center justify-center font-black text-lg shadow-lg
+                                        transition-all duration-300 group-hover/card:scale-110 
+                                        ${isOnline ? 'bg-yellow-500 shadow-yellow-200' : isF2F ? 'bg-blue-600 shadow-blue-200' : 'bg-slate-900'}`}>
+                          {group.groupName?.substring(0, 2).toUpperCase()}
                         </div>
-                    </div>
+                      
+                      {/* Sections */}
+                      <div className="flex flex-col gap-1">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Section</span>
+                          <div className="flex flex-wrap gap-1">
+                              {group.sections && group.sections.length > 0 ? (
+                                  group.sections.map((section: string, index: number) => (
+                                      <span 
+                                          key={index} 
+                                          className="bg-white/60 text-slate-700 px-2 py-0.5 rounded-md text-[10px] font-bold border border-slate-200/50"
+                                      >
+                                          {section}
+                                      </span>
+                                  ))
+                              ) : (
+                                  <span className="text-slate-400 text-[10px] italic">No Section</span>
+                              )}
+                          </div>
+                      </div>
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 relative z-10">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleTogglePin(group._id, group.isPinned); }}
+                      className={`p-3 rounded-xl transition-all ${group.isPinned ? 'bg-amber-100 text-amber-600 shadow-sm' : 'bg-white/50 text-slate-300 hover:text-amber-600 hover:bg-amber-50'}`}
+                    >
+                      <Pin size={18} className={group.isPinned ? "fill-current" : "-rotate-45"} />
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); handleEdit(group); }} className="p-3 bg-white/50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
+                      <Edit3 size={18}/>
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDelete(group._id); }} className="p-3 bg-white/50 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
+                      <Trash2 size={18}/>
+                    </button>
+                  </div>
+                </div>
+
+                <h3 className={`text-xl font-bold mb-2 transition-colors ${isOnline ? 'text-yellow-900' : isF2F ? 'text-blue-900' : 'text-slate-800'}`}>
+                  {group.groupName}
+                </h3>
                 
+                <p className="text-slate-500 text-sm italic line-clamp-2 border-l-2 border-slate-200 pl-3 mb-6">
+                  "{group.thesisTitle}"
+                </p>
+
+                {/* Advisers Display */}
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                   <div className="bg-white/60 p-3 rounded-xl border border-slate-100">
+                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">SE2 Adviser</p>
+                      <p className="text-xs font-bold text-slate-700 truncate">{group.se2Adviser || "—"}</p>
+                   </div>
+                   <div className={`p-3 rounded-xl border transition-colors ${isOnline ? 'bg-yellow-100 border-yellow-200' : isF2F ? 'bg-blue-100 border-blue-200' : 'bg-white/60 border-slate-100'}`}>
+                      <p className={`text-[8px] font-black uppercase tracking-widest mb-1 ${isOnline ? 'text-yellow-600' : isF2F ? 'text-blue-600' : 'text-slate-400'}`}>PM Adviser</p>
+                      <p className={`text-xs font-bold truncate ${isOnline ? 'text-yellow-900' : isF2F ? 'text-blue-900' : 'text-slate-700'}`}>{group.pmAdviser || "—"}</p>
+                   </div>
                 </div>
-                
-                <div className="flex gap-2 relative z-10">
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleTogglePin(group._id, group.isPinned); }}
-                    className={`p-3 rounded-xl transition-all ${group.isPinned ? 'bg-amber-100 text-amber-600 shadow-sm' : 'bg-slate-50 text-slate-300 hover:text-amber-600 hover:bg-amber-50'}`}
-                  >
-                    <Pin size={18} className={group.isPinned ? "fill-current" : "-rotate-45"} />
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); handleEdit(group); }} className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
-                    <Edit3 size={18}/>
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete(group._id); }} className="p-3 bg-slate-50 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
-                    <Trash2 size={18}/>
-                  </button>
+
+                {/* Members Display */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {group.members.map((m: any, i: number) => (
+                    <span key={i} className={`text-[10px] px-3 py-1.5 rounded-full font-bold uppercase tracking-tight border transition-all ${
+                      m === group.assignPM 
+                      ? "bg-amber-100 text-amber-600 border-amber-200" 
+                      : "bg-white/50 text-slate-400 border-slate-100"
+                    }`}>
+                      {m === group.assignPM && "👑 "}{m}
+                    </span>
+                  ))}
                 </div>
-              </div>
 
-              <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover/card:text-blue-600 transition-colors">
-                {group.groupName}
-              </h3>
-              
-              <p className="text-slate-500 text-sm italic line-clamp-2 border-l-2 border-slate-100 pl-3 mb-6 group-hover/card:border-blue-200">
-                "{group.thesisTitle}"
-              </p>
-
-              {/* Advisers Display */}
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">SE2 Adviser</p>
-                    <p className="text-xs font-bold text-slate-700 truncate">{group.se2Adviser || "—"}</p>
-                 </div>
-                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">PM Adviser</p>
-                    <p className="text-xs font-bold text-slate-700 truncate">{group.pmAdviser || "—"}</p>
-                 </div>
-              </div>
-
-              {/* Members Display */}
-              <div className="flex flex-wrap gap-2 mb-4">
-                {group.members.map((m: any, i: number) => (
-                  <span key={i} className={`text-[10px] px-3 py-1.5 rounded-full font-bold uppercase tracking-tight border transition-all ${
-                    m === group.assignPM 
-                    ? "bg-amber-50 text-amber-600 border-amber-200 group-hover/card:bg-amber-100" 
-                    : "bg-slate-50 text-slate-400 border-slate-100"
-                  }`}>
-                    {m === group.assignPM && "👑 "}{m}
-                  </span>
-                ))}
-              </div>
-
-              {/* BOTTOM: CONSULTATION TIME */}
-              <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                    <div className="bg-amber-100 p-1.5 rounded-lg text-amber-600">
-                        <Clock size={14} />
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Consultation Time</span>
-                        <span className="text-xs font-bold text-slate-700">
-                            {group.consultationDay || "Day Unset"} @ {group.consultationTime || "Time Unset"}
-                        </span>
-                    </div>
+                {/* BOTTOM: CONSULTATION TIME */}
+                <div className="pt-3 border-t border-slate-200/50 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                      <div className="bg-slate-100 p-1.5 rounded-lg text-slate-500">
+                          <Clock size={14} />
+                      </div>
+                      <div className="flex flex-col">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Consultation Time</span>
+                          <span className="text-xs font-bold text-slate-700">
+                              {group.consultationDay || "Day Unset"} @ {group.consultationTime || "Time Unset"}
+                          </span>
+                      </div>
+                  </div>
                 </div>
               </div>
-
             </div>
-          </div>
-        ))}
+          );
+      })}
       </div>
-    </div>
-  );
-}
+      </div>);}
