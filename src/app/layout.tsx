@@ -47,7 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       >
         
         {/* --- MOBILE HEADER (Visible only on small screens) --- */}
-        <div className="md:hidden flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shrink-0">
+        <div className="md:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200 shrink-0 z-30">
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
               <GraduationCap size={20} />
@@ -85,7 +85,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             ${isCollapsed ? 'md:w-20' : 'md:w-72'}
             w-72 /* Mobile width is always 72 */
 
-            bg-white dark:bg-slate-900 dark:border-slate-800 border-r border-slate-200 
+            w-[280px] bg-white border-r border-slate-200
           `}
         >
           

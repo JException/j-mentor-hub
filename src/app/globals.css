@@ -4,15 +4,10 @@
 @tailwind utilities;
 
 :root {
-  /* Default (Light Mode) */
+  /* Default (Light Mode) - Forced Everywhere */
   --background: #f8fafc;
   --foreground: #171717;
-}
-
-.dark {
-  /* Night Mode */
-  --background: #020617; /* Dark Slate 950 */
-  --foreground: #f8fafc; /* Light Text */
+  color-scheme: light; /* Tells the browser to ignore system dark mode */
 }
 
 body {
