@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { getLeaderboardData, getDeliverablesFromDB } from "@/app/actions"; 
 import { 
   ArrowRight, Clock, Trophy, Calendar, Users, Moon, Sun, 
-  CheckCircle2, CircleDashed, CheckSquare // Added icons for the tooltip
+  CheckCircle2, CircleDashed, CheckSquare, FileText, FolderOpen, Image as ImageIcon 
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -44,17 +44,18 @@ export default function DashboardPage() {
   const [topGroups, setTopGroups] = useState<any[]>([]); 
   const [deliverables, setDeliverables] = useState<any[]>([]);
   const [consultations, setConsultations] = useState<any[]>([]); 
-  
-  // --- UPDATED STATS STATE to include breakdowns for the tooltip ---
+  const [recentFiles, setRecentFiles] = useState<any[]>([]); 
+
   const [stats, setStats] = useState({ 
     totalGroups: 0, 
     synced: 0, 
     students: 0, 
     accumulatedScore: 0,
-    maxPossibleScore: 0, // New
-    tasksDone: 0,        // New
-    tasksOngoing: 0,     // New
-    tasksNotStarted: 0   // New
+    maxPossibleScore: 0,
+    tasksDone: 0,        
+    tasksOngoing: 0,     
+    tasksNotStarted: 0,
+    groupsWithFiles: 0 
   });
 
   const [loading, setLoading] = useState(true);
@@ -83,7 +84,7 @@ export default function DashboardPage() {
       
       try {
         const lbData = await getLeaderboardData();
-        const tasksData = await getDeliverablesFromDB(); // Fetch tasks early to use in calculation
+        const tasksData = await getDeliverablesFromDB(); 
 
         const { groups = [], progress = [] } = lbData || {};
 
@@ -126,18 +127,14 @@ export default function DashboardPage() {
 
         setConsultations(upcomingConsultations);
 
-        // 4. --- NEW LOGIC: Calculate Max Score & Task Breakdowns ---
+        // 4. Calculate Max Score & Task Breakdowns
         const totalSystemScore = groupsWithScores.reduce((acc: number, group: any) => acc + group.totalScore, 0);
         
-        // Calculate Max Possible Score based on Deadlines
         const today = new Date();
         const pastTasks = (tasksData || []).filter((t: any) => new Date(t.deadline) <= today);
-        
-        // Assume standard points (e.g., 10 pts per task) if not defined in DB
         const maxPointsPerGroupSoFar = pastTasks.reduce((acc: number, t: any) => acc + (t.points || 10), 0);
         const maxSystemScore = maxPointsPerGroupSoFar * groups.length;
 
-        // Calculate Status Counts for Tooltip
         let countDone = 0;
         let countOngoing = 0;
         progress.forEach((p: any) => {
@@ -145,9 +142,25 @@ export default function DashboardPage() {
             if (p.status === 'In Progress') countOngoing++;
         });
 
-        // "Not Started" is roughly: (Total Groups * Total Tasks Issued) - (Done + Ongoing)
         const totalExpected = groups.length * pastTasks.length;
         const countNotStarted = Math.max(0, totalExpected - (countDone + countOngoing));
+
+        // 5. Process Files
+        let allFiles: any[] = [];
+        let groupsUploadedCount = 0;
+        groups.forEach((g: any) => {
+            if (g.files && g.files.length > 0) {
+                groupsUploadedCount++;
+                const groupFiles = g.files.map((f: any) => ({
+                    ...f,
+                    groupName: g.groupName,
+                    uploadedAt: f.uploadedAt || new Date().toISOString()
+                }));
+                allFiles = [...allFiles, ...groupFiles];
+            }
+        });
+        allFiles.sort((a: any, b: any) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+        setRecentFiles(allFiles.slice(0, 3));
 
         setStats({
           totalGroups: groups.length,
@@ -157,10 +170,11 @@ export default function DashboardPage() {
           maxPossibleScore: maxSystemScore,
           tasksDone: countDone,
           tasksOngoing: countOngoing,
-          tasksNotStarted: countNotStarted
+          tasksNotStarted: countNotStarted,
+          groupsWithFiles: groupsUploadedCount
         });
 
-        // 5. Set Deliverables List
+        // 6. Set Deliverables List
         const upcoming = (tasksData || [])
           .filter((t: any) => t.deadline >= today.toISOString().split('T')[0])
           .sort((a: any, b: any) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
@@ -186,10 +200,16 @@ export default function DashboardPage() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  // Calculate Progress Bar Percentage
   const progressPercentage = stats.maxPossibleScore > 0 
     ? Math.min(100, Math.round((stats.accumulatedScore / stats.maxPossibleScore) * 100)) 
     : 0;
+
+  const uploadPercentage = stats.totalGroups > 0 
+    ? Math.round((stats.groupsWithFiles / stats.totalGroups) * 100) 
+    : 0;
+
+  // --- NEW: Check if Goal is Met ---
+  const isGoalMet = !loading && stats.maxPossibleScore > 0 && stats.accumulatedScore >= stats.maxPossibleScore;
 
   return (
     <div className="min-h-screen transition-colors duration-300 dark:bg-slate-950">
@@ -206,16 +226,10 @@ export default function DashboardPage() {
                 Welcome back, Sir Pura. Manage your thesis groups.
             </p>
           </div>
-          <button 
-            onClick={toggleDarkMode}
-            className="self-start md:self-center flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-200 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
-          >
-            {isDarkMode ? <Sun className="w-4 h-4 text-yellow-400"/> : <Moon className="w-4 h-4 text-slate-600"/>}
-            <span>{isDarkMode ? "Light Mode" : "Night Mode"}</span>
-          </button>
+        
         </header>
 
-        {/* --- MODIFIED STATS GRID --- */}
+        {/* --- STATS GRID --- */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           
           {/* Card 1: Groups */}
@@ -242,13 +256,23 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Card 4: TOTAL SCORE (Modified with Progress Bar & Tooltip) */}
+          {/* Card 4: TOTAL SCORE (UPDATED FOR GREEN GOAL) */}
           <div className="relative group bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all hover:shadow-md cursor-default">
             <div className="flex justify-between items-start">
                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Score</p>
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Score</p>
+                    {/* GOAL MET BADGE */}
+                    {isGoalMet && (
+                        <span className="bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded text-[9px] font-bold animate-pulse">
+                            GOAL: MET!
+                        </span>
+                    )}
+                  </div>
+                  
                   <div className="flex items-baseline gap-1">
-                    <p className="text-xl md:text-2xl font-black text-blue-600 dark:text-blue-400">
+                    {/* DYNAMIC COLOR: Green if met, Blue if not */}
+                    <p className={`text-xl md:text-2xl font-black transition-colors ${isGoalMet ? "text-green-500 dark:text-green-400" : "text-blue-600 dark:text-blue-400"}`}>
                         {loading ? "--" : stats.accumulatedScore}
                     </p>
                     <span className="text-xs font-bold text-slate-300 dark:text-slate-600">
@@ -258,10 +282,10 @@ export default function DashboardPage() {
                </div>
             </div>
 
-            {/* PROGRESS BAR */}
+            {/* PROGRESS BAR (Dynamic Color) */}
             <div className="mt-3 w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                <div 
-                 className="h-full bg-blue-600 rounded-full transition-all duration-1000 ease-out"
+                 className={`h-full rounded-full transition-all duration-1000 ease-out ${isGoalMet ? "bg-green-500" : "bg-blue-600"}`}
                  style={{ width: `${loading ? 0 : progressPercentage}%` }}
                />
             </div>
@@ -291,7 +315,6 @@ export default function DashboardPage() {
                    <span className="font-bold">{stats.tasksNotStarted}</span>
                  </div>
                </div>
-               {/* Tiny Arrow */}
                <div className="absolute -top-1 right-8 w-3 h-3 bg-slate-800 dark:bg-slate-700 transform rotate-45"></div>
             </div>
           </div>
@@ -303,7 +326,6 @@ export default function DashboardPage() {
           
           {/* CONSULTATION SCHEDULE */}
           <div className="md:col-span-2 bg-white dark:bg-slate-900 rounded-[30px] md:rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden flex flex-col transition-colors">
-             {/* Changed pb-4 to pb-0 to remove bottom padding */}
               <div className="p-6 md:p-8 pb-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className="h-10 w-10 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center">
@@ -333,7 +355,7 @@ export default function DashboardPage() {
                             </div>
                             
                             <div>
-                              <h4 className="font-bold text-slate-700 dark:text-slate-200">{consult.groupName}</h4>
+                              <h3 className="font-bold text-slate-700 dark:text-slate-200">{consult.groupName}</h3>
                               <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-slate-500 dark:text-slate-400 mt-1">
                                  <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {consult.timeDisplay}</span>
                                  <span className="hidden sm:inline w-1 h-1 bg-slate-300 rounded-full"></span>
@@ -403,16 +425,13 @@ export default function DashboardPage() {
                   <div className="h-full flex items-center justify-center text-slate-500 text-sm">No rankings yet.</div>
               )}
             </div>
-            {/* ADD THIS SECTION */}
             <div className="mt-auto pt-4 text-center z-10">
               <p className="text-[10px] font-medium text-slate-500 uppercase tracking-widest">
                 Updated as of {loading ? "..." : lastUpdated}
               </p>
             </div>
-            {/* END OF NEW SECTION */}
       
           </div>
-          
 
           {/* GROUP MANAGER */}
           <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between transition-colors">
@@ -426,11 +445,55 @@ export default function DashboardPage() {
             <Link href="/groups" className="text-blue-600 dark:text-blue-400 font-bold text-sm">View Groups →</Link>
           </div>
 
-          {/* REPOSITORY */}
-          <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 border-dashed flex flex-col items-center justify-center text-center transition-colors">
-            <div className="text-slate-300 dark:text-slate-600 text-3xl mb-2">📁</div>
-            <h3 className="font-bold text-slate-800 dark:text-white">Repository</h3>
-            <p className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold tracking-tighter">Planned Feature</p>
+          {/* REPOSITORY CARD */}
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col transition-colors">
+             <h3 className="font-bold text-slate-800 dark:text-white mb-1 flex items-center gap-2">
+               <FolderOpen className="w-5 h-5 text-indigo-500" /> Files Repository
+             </h3>
+             
+             {/* Upload Stats */}
+             <div className="mb-4">
+                 <div className="flex justify-between items-baseline mb-1">
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Activity</span>
+                    <span className="text-[10px] font-bold text-indigo-500 uppercase">{stats.groupsWithFiles} / {stats.totalGroups} Groups</span>
+                 </div>
+                 <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${uploadPercentage}%` }}></div>
+                 </div>
+             </div>
+
+             <div className="flex-1 space-y-3">
+               {loading ? (
+                  <p className="text-xs text-slate-400">Loading files...</p>
+               ) : recentFiles.length > 0 ? (
+                  recentFiles.map((file, idx) => (
+                      <div key={idx} className="flex items-start gap-3 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                          <div className="mt-0.5 text-slate-400 dark:text-slate-500">
+                             {file.url && (file.url.endsWith('.png') || file.url.endsWith('.jpg')) 
+                               ? <ImageIcon size={16}/> 
+                               : <FileText size={16}/>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                             <p className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate">{file.name || "Untitled File"}</p>
+                             <div className="flex justify-between items-center mt-0.5">
+                                <span className="text-[10px] text-indigo-500 font-bold truncate max-w-[80px]">{file.groupName}</span>
+                                <span className="text-[9px] text-slate-400">{formatDate(file.uploadedAt)}</span>
+                             </div>
+                          </div>
+                      </div>
+                  ))
+               ) : (
+                  <div className="flex flex-col items-center justify-center h-20 text-slate-400">
+                     <span className="text-xs">No files uploaded yet</span>
+                  </div>
+               )}
+             </div>
+
+             <div className="mt-4 text-center">
+               <Link href="/files" className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest hover:text-indigo-600 dark:hover:text-indigo-400">
+                  Open Repository
+               </Link>
+             </div>
           </div>
 
           {/* UPCOMING DEADLINES */}

@@ -5,7 +5,8 @@ import Link from 'next/link';
 import "./globals.css"; 
 import { 
   Users, Calendar, LayoutDashboard, ChevronLeft, ChevronRight, GraduationCap, 
-  Medal, List, CheckSquare, Menu, X // Added Menu and X icons
+  Medal, List, CheckSquare, Menu, X, 
+  FileText, Presentation // <--- Added Presentation icon
 } from 'lucide-react';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -21,6 +22,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     { name: 'Schedule Parser', path: '/parser', icon: Calendar },
     { name: 'Thesis Groups', path: '/groups', icon: Users },
     { name: 'Deliverables', path: '/deliverables', icon: CheckSquare },
+    
+    // --- NEW TAB ADDED HERE ---
+    { name: 'Mock Defense', path: '/mock-defense', icon: Presentation },
+
+    { name: 'Files Repository', path: '/files', icon: FileText }, 
     { name: 'Leaderboards', path: '/leaderboards', icon: Medal },
     { name: 'Masterlist', path: '/masterlist', icon: List },
   ];

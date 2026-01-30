@@ -1,5 +1,5 @@
 import { dbConnect } from "@/lib/db";
-import { Group } from "@/models/Group";
+import Group from "@/models/Group";
 import Task from "@/models/Task";
 import Progress from "@/models/Progress";
 import { notFound } from "next/navigation";
@@ -13,7 +13,9 @@ import {
   Circle, 
   Clock, 
   Tag,
-  Trophy
+  Trophy,
+  Presentation,
+  MessageSquareQuote
 } from 'lucide-react';
 
 export default async function GroupPage({ params }: { params: Promise<{ id: string }> }) {
@@ -32,7 +34,37 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
     return notFound();
   }
 
-  // 2. Data Processing: Merge Tasks with Progress Status
+  // --- DATA FIXES (Mapping DB fields to UI variables) ---
+  // The DB likely stores these nested, so we unpack them here for safety.
+  // @ts-ignore
+  const seAdviser = group.advisers?.seAdviser || group.se2Adviser || "";
+  // @ts-ignore
+  const pmAdviser = group.advisers?.pmAdviser || group.pmAdviser || "";
+  // @ts-ignore
+  const projectManager = group.projectManager || group.assignPM || "";
+  
+  // --- MOCK DEFENSE CALCULATIONS ---
+  // @ts-ignore
+  const grades = group.mockDefenseGrades || [];
+  let presentationTotal = 0;
+  let paperTotal = 0;
+  
+  grades.forEach((g: any) => {
+    presentationTotal += (Number(g.presentationScore) || 0);
+    paperTotal += (Number(g.paperScore) || 0);
+  });
+
+  // Calculate averages if there are grades, otherwise 0
+  const avgPresentation = grades.length ? (presentationTotal / grades.length).toFixed(1) : "0.0";
+  const avgPaper = grades.length ? (paperTotal / grades.length).toFixed(1) : "0.0";
+  
+  // Total Score (Simple Average of the two components for display)
+  const totalScore = grades.length 
+    ? ((Number(avgPresentation) + Number(avgPaper)) / 2).toFixed(1)
+    : "0.0";
+
+
+  // --- PROGRESS LOGIC ---
   // Create a fast lookup map: { "taskId123": "Completed" }
   const progressMap = new Map(
     groupProgress.map((p: any) => [p.taskId.toString(), p.status])
@@ -53,7 +85,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
     };
   });
 
-  // 3. Calculate Score (Leaderboard Logic)
+  // Calculate Leaderboard Score
   const totalTasks = taskList.length;
   const completedTasks = taskList.filter((t) => t.isCompleted).length;
   const progressScore = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
@@ -68,7 +100,9 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
       <header className="border-b border-slate-100 pb-8">
         <div className="flex flex-wrap gap-2 mb-4">
            {/* Section Tags */}
+           {/* @ts-ignore */}
            {group.sections && group.sections.length > 0 ? (
+             // @ts-ignore
              group.sections.map((sec: string, i: number) => (
                <span key={i} className="flex items-center gap-1 bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider border border-indigo-100">
                  <Tag size={10} /> {sec}
@@ -79,9 +113,11 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
            )}
         </div>
         <h1 className="text-4xl md:text-6xl font-bold text-slate-900 tracking-tight mb-3">
+          {/* @ts-ignore */}
           {group.groupName}
         </h1>
         <p className="text-xl md:text-2xl text-slate-400 italic font-medium leading-relaxed max-w-4xl">
+          {/* @ts-ignore */}
           "{group.thesisTitle}"
         </p>
       </header>
@@ -97,6 +133,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
               <Users className="text-blue-500" size={20} /> Team Members
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* @ts-ignore */}
               {group.members.map((m: string, i: number) => (
                 <div key={i} className="px-5 py-4 bg-slate-50 rounded-2xl border border-slate-100 text-sm font-bold text-slate-700 flex items-center gap-3">
                   <div className="h-2 w-2 rounded-full bg-slate-300 flex-shrink-0"></div>
@@ -106,7 +143,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
 
-          {/* DELIVERABLES LIST (The "Better UI" Implementation) */}
+          {/* DELIVERABLES LIST */}
           <div className="bg-white p-8 rounded-[32px] border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-8">
               <h3 className="flex items-center gap-3 text-lg font-bold text-slate-800">
@@ -131,7 +168,6 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
                     }`}
                   >
                     <div className="flex items-start gap-4">
-                      {/* FIX: flex-shrink-0 prevents icon from squishing */}
                       <div className={`mt-0.5 flex-shrink-0 ${task.isCompleted ? 'text-emerald-500' : 'text-slate-300'}`}>
                         {task.isCompleted ? <CheckCircle2 size={24} /> : <Circle size={24} />}
                       </div>
@@ -150,7 +186,6 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
                       </div>
                     </div>
 
-                    {/* Status Badge */}
                     <div className={`hidden sm:flex flex-shrink-0 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ml-4 items-center ${
                       task.isCompleted 
                         ? 'bg-emerald-100 text-emerald-700' 
@@ -168,11 +203,11 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
         {/* RIGHT COLUMN (1/3 width) - Stats & Advisers */}
         <div className="space-y-6">
           
-          {/* SCORE CARD */}
+          {/* 1. SCORE CARD */}
           <div className="bg-slate-900 p-8 rounded-[32px] text-white shadow-xl relative overflow-hidden group">
             <div className="relative z-10">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Leaderboard Score</span>
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Progress Score</span>
                 <Trophy size={16} className="text-yellow-500" />
               </div>
               <div className="flex items-end gap-2">
@@ -182,7 +217,6 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
                 <span className="text-2xl font-bold text-slate-500 mb-2">%</span>
               </div>
               
-              {/* Progress Bar */}
               <div className="w-full h-2 bg-slate-800 rounded-full mt-6 overflow-hidden">
                 <div 
                   className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-1000" 
@@ -191,12 +225,11 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
               </div>
             </div>
             
-            {/* Background Decoration */}
             <div className="absolute -top-10 -right-10 w-40 h-40 bg-blue-600 rounded-full blur-[80px] opacity-20 group-hover:opacity-30 transition-opacity"></div>
             <div className="absolute bottom-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
           </div>
 
-          {/* ADVISERS CARD */}
+          {/* 2. ADVISERS CARD */}
           <div className="bg-white p-8 rounded-[32px] border border-slate-200">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
@@ -211,7 +244,7 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
                   Technical Adviser (SE2)
                 </span>
                 <p className="text-base font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
-                  {group.se2Adviser || <span className="text-slate-300 italic font-normal">TBA</span>}
+                  {seAdviser || <span className="text-slate-300 italic font-normal">TBA</span>}
                 </p>
               </div>
               
@@ -222,21 +255,70 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
                   Project Adviser (PM)
                 </span>
                 <p className="text-base font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
-                  {group.pmAdviser || <span className="text-slate-300 italic font-normal">TBA</span>}
+                  {pmAdviser || <span className="text-slate-300 italic font-normal">TBA</span>}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* PROJECT MANAGER CARD */}
+          {/* 3. PROJECT MANAGER CARD */}
           <div className="bg-amber-50 p-8 rounded-[32px] border border-amber-100">
             <div className="flex items-center gap-3 mb-4">
                <Crown className="text-amber-500" size={24} />
-               <span className="text-[10px] font-black uppercase text-amber-600 tracking-widest">Project Manager</span>
+               <span className="text-xs font-black uppercase text-amber-600 tracking-widest">Project Manager</span>
             </div>
             <p className="text-lg font-bold text-slate-800">
-              {group.assignPM || <span className="text-amber-300 italic">Not Assigned</span>}
+              {projectManager || <span className="text-amber-300 italic">Not Assigned</span>}
             </p>
+          </div>
+
+          {/* 4. NEW: MOCK DEFENSE GRADE CARD */}
+          <div className="bg-white p-8 rounded-[32px] border border-slate-200 shadow-sm">
+             <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+                    <Presentation size={20} />
+                  </div>
+                  <h3 className="font-bold text-slate-800">Mock Defense</h3>
+                </div>
+                {/* Total Average Score */}
+                <div className="px-3 py-1 bg-slate-900 text-white rounded-lg text-sm font-bold">
+                  {totalScore}
+                </div>
+             </div>
+
+             {/* Score Breakdown */}
+             <div className="grid grid-cols-2 gap-4 mb-6">
+               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                  <span className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Presentation</span>
+                  <span className="text-xl font-bold text-slate-800">{avgPresentation}</span>
+               </div>
+               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                  <span className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Paper</span>
+                  <span className="text-xl font-bold text-slate-800">{avgPaper}</span>
+               </div>
+             </div>
+
+             {/* Comments Section */}
+             <div className="space-y-4">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Panelist Comments</h4>
+                
+                {grades.length === 0 ? (
+                  <p className="text-sm text-slate-300 italic text-center py-4">No grades submitted yet.</p>
+                ) : (
+                  grades.map((grade: any, i: number) => (
+                    <div key={i} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 relative">
+                       <MessageSquareQuote size={16} className="text-slate-300 absolute top-4 right-4" />
+                       <p className="text-sm text-slate-600 italic leading-relaxed mb-2">
+                         "{grade.comment || "No comment provided."}"
+                       </p>
+                       <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">
+                         — {grade.panelistName || "Panelist"}
+                       </div>
+                    </div>
+                  ))
+                )}
+             </div>
           </div>
 
         </div>

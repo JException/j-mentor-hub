@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Save, Trash2, Pin, Edit3, X, Users, Crown, 
-  GraduationCap, LayoutGrid, CalendarClock, Clock, Laptop, School
+  GraduationCap, LayoutGrid, CalendarClock, Clock, Laptop, School, Plus, ChevronUp
 } from 'lucide-react'; 
 import { saveGroupToDB, getGroupsFromDB, deleteGroup, updateGroup, togglePinGroup } from "@/app/actions";
 import { useRouter } from 'next/navigation';
@@ -11,6 +11,7 @@ export default function GroupsPage() {
   const [groups, setGroups] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [showForm, setShowForm] = useState(false); // NEW: Controls form visibility
   const router = useRouter();
   const [sortBy, setSortBy] = useState<'newest' | 'alphabetical' | 'group'>('newest');
 
@@ -28,8 +29,6 @@ export default function GroupsPage() {
     "Ms. Elisa Malasaga"
   ];
 
-  // ... existing constants ...
-
   // --- NEW: DEFENSE MODE CONSTANTS ---
   const ONLINE_PMS = ["Dr. Angelo Arguson", "Ms. Elisa Malasaga"];
   const F2F_PMS = ["Dr. Hadji Tejuco", "Dr. Beau Gray Habal", "Dr. Hazel Patilano"];
@@ -38,7 +37,6 @@ export default function GroupsPage() {
     "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
   ];
 
-  // Generate 1-hour intervals from 7 AM to 8 PM
   const TIME_OPTIONS = [
     "07:00 AM", "08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM",
     "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", 
@@ -70,7 +68,6 @@ export default function GroupsPage() {
     consultationTime: ''
   });
 
-  // DATA LOADING
   const loadData = async () => {
     const data = await getGroupsFromDB();
     setGroups(data || []);
@@ -80,7 +77,6 @@ export default function GroupsPage() {
     loadData();
   }, []); 
 
-  // PIN TOGGLE
   const handleTogglePin = async (id: string, status: boolean) => {
     try {
       await togglePinGroup(id, status);
@@ -90,7 +86,6 @@ export default function GroupsPage() {
     }
   };
 
-  // SORTING LOGIC
   const sortedGroups = [...groups].sort((a, b) => {
     if (a.isPinned && !b.isPinned) return -1;
     if (!a.isPinned && b.isPinned) return 1;
@@ -113,13 +108,14 @@ export default function GroupsPage() {
 
   const handleEdit = (g: any) => {
     setIsEditing(g._id);
+    setShowForm(true); // Auto-open form when editing
     
-    // SAFETY CHECK: Ensure sections is always an array
+    // SAFETY CHECK
     let safeSections: string[] = [];
     if (Array.isArray(g.sections)) {
       safeSections = g.sections;
     } else if (typeof g.sections === 'string') {
-      // @ts-ignore - Handle legacy string data safely
+      // @ts-ignore 
       safeSections = g.sections.split(','); 
     }
 
@@ -137,10 +133,23 @@ export default function GroupsPage() {
       consultationTime: g.consultationTime || '' 
     });
 
-    const element = document.getElementById('form-top');
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    // Timeout to allow render before scrolling
+    setTimeout(() => {
+      const element = document.getElementById('form-top');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
+  const handleCloseForm = () => {
+    setShowForm(false);
+    setIsEditing(null);
+    setFormData({
+        groupName: '', thesisTitle: '', members: ['', '', '', ''], assignPM: '', 
+        se2Adviser: '', pmAdviser: '', sections: [], 
+        consultationDay: '', consultationTime: '' 
+    });
   };
 
   const saveGroup = async () => {
@@ -164,13 +173,7 @@ export default function GroupsPage() {
 
       if (result.success) {
         await loadData();
-        // Reset Form
-        setFormData({ 
-            groupName: '', thesisTitle: '', members: ['', '', '', ''], assignPM: '', 
-            se2Adviser: '', pmAdviser: '', sections: [], 
-            consultationDay: '', consultationTime: '' 
-        });
-        setIsEditing(null);
+        handleCloseForm(); // Close form on success
       }
     } catch (error) {
       console.error("Save Error:", error);
@@ -187,33 +190,43 @@ export default function GroupsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-12 p-6 pb-20">
-      <header className="px-2">
-        <h1 className="text-6xl font-medium tracking-tight text-slate-800">
-          Thesis <span className="text-slate-300 italic">Groups</span>
-        </h1>
-        <p className="text-slate-500 mt-2 font-medium">Manage active mentoring groups, advisers, and sections.</p>
-      </header>
+      
+      {/* HEADER WITH ACTION BUTTON */}
+      <div className="flex flex-col md:flex-row justify-between items-end gap-6 px-2">
+        <header>
+          <h1 className="text-6xl font-medium tracking-tight text-slate-800">
+            Thesis <span className="text-slate-300 italic">Groups</span>
+          </h1>
+          <p className="text-slate-500 mt-2 font-medium">Manage active mentoring groups, advisers, and sections.</p>
+        </header>
 
-      {/* FORM SECTION */}
-      <section className="bg-white rounded-[40px] border border-slate-200 shadow-xl p-10 space-y-8">
-        <div className="flex justify-between items-center">
-          <h2 id="form-top" className="text-2xl font-bold text-slate-800">
-            {isEditing ? 'Update Group Details' : 'Register New Group'}
-          </h2>
-          {isEditing && (
+        {/* Toggle Button */}
+        {!showForm && (
             <button 
-              onClick={() => {
-                setIsEditing(null); 
-                setFormData({
-                    groupName:'', thesisTitle:'', members:['','','',''], assignPM:'', 
-                    se2Adviser:'', pmAdviser:'', sections:[], consultationDay: '', consultationTime: ''
-                });
-              }} 
-              className="text-red-500 flex items-center gap-2 text-xs font-black uppercase tracking-widest hover:bg-red-50 p-2 rounded-xl transition-all"
+                onClick={() => setShowForm(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-bold shadow-lg hover:shadow-blue-200 hover:-translate-y-1 transition-all flex items-center gap-2"
             >
-              <X size={14}/> Cancel Edit
+                <Plus size={20} strokeWidth={3} />
+                REGISTER NEW GROUP
             </button>
-          )}
+        )}
+      </div>
+
+      {/* CONDITIONAL FORM SECTION */}
+      {showForm && (
+      <section className="bg-white rounded-[40px] border border-slate-200 shadow-xl p-10 space-y-8 animate-in slide-in-from-top-4 duration-300">
+        <div className="flex justify-between items-center border-b border-slate-100 pb-6">
+          <h2 id="form-top" className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+             {isEditing ? <Edit3 className="text-blue-500" /> : <Plus className="text-green-500" />}
+             {isEditing ? 'Update Group Details' : 'Register New Group'}
+          </h2>
+          
+          <button 
+              onClick={handleCloseForm} 
+              className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest"
+          >
+              <X size={18}/> Close
+          </button>
         </div>
 
         {/* Row 1: Basic Info */}
@@ -382,15 +395,24 @@ export default function GroupsPage() {
             </div>
           </div>
 
-          <button 
-            onClick={saveGroup} 
-            disabled={isSaving}
-            className="w-full md:w-auto bg-slate-900 hover:bg-blue-600 text-white px-10 py-5 rounded-[24px] font-black text-xs uppercase tracking-[0.2em] shadow-xl flex items-center justify-center gap-3 transition-all disabled:opacity-50"
-          >
-            {isSaving ? 'Processing...' : (isEditing ? 'Update Record' : 'Register Group')}
-          </button>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+              <button 
+                onClick={handleCloseForm}
+                className="w-full md:w-auto bg-slate-100 hover:bg-slate-200 text-slate-500 px-8 py-5 rounded-[24px] font-black text-xs uppercase tracking-[0.2em] transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={saveGroup} 
+                disabled={isSaving}
+                className="w-full md:w-auto bg-slate-900 hover:bg-blue-600 text-white px-10 py-5 rounded-[24px] font-black text-xs uppercase tracking-[0.2em] shadow-xl flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+              >
+                {isSaving ? 'Processing...' : (isEditing ? 'Update Record' : 'Register Group')}
+              </button>
+          </div>
         </div>
       </section>
+      )}
 
       {/* SORTING CONTROLS */}
       <div className="flex justify-end px-2">
@@ -407,7 +429,6 @@ export default function GroupsPage() {
 
       {/* GROUPS LIST */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-       
        
 {sortedGroups.map((group) => {
           // 1. Determine Defense Mode based on PM Adviser
@@ -546,4 +567,6 @@ export default function GroupsPage() {
           );
       })}
       </div>
-      </div>);}
+      </div>
+  );
+}
