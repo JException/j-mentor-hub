@@ -226,38 +226,43 @@ export default function DashboardPage() {
                 Welcome back, Sir Pura. Manage your thesis groups.
             </p>
           </div>
-        
         </header>
 
-        {/* --- STATS GRID --- */}
+        {/* --- STATS GRID (UPDATED WITH LINKS & HOVER EFFECTS) --- */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           
-          {/* Card 1: Groups */}
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-colors">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Groups</p>
-            <p className="text-xl md:text-2xl font-black text-slate-800 dark:text-white">
-                {loading ? "--" : stats.totalGroups}
-            </p>
-          </div>
+          {/* Card 1: Groups (Blue Hover) -> Links to /groups */}
+          <Link href="/groups" className="block">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all duration-200 hover:bg-blue-50 dark:hover:bg-slate-800 hover:border-blue-200 cursor-pointer h-full">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest group-hover:text-blue-500">Total Groups</p>
+              <p className="text-xl md:text-2xl font-black text-slate-800 dark:text-white mt-1">
+                  {loading ? "--" : stats.totalGroups}
+              </p>
+            </div>
+          </Link>
 
-          {/* Card 2: Synced */}
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-colors">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Synced Schedules</p>
-            <p className="text-xl md:text-2xl font-black text-slate-800 dark:text-white">
-                {loading ? "--" : stats.synced}
-            </p>
-          </div>
+          {/* Card 2: Synced (Indigo Hover) -> Links to /parser */}
+          <Link href="/parser" className="block">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all duration-200 hover:bg-indigo-50 dark:hover:bg-slate-800 hover:border-indigo-200 cursor-pointer h-full">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Synced Schedules</p>
+              <p className="text-xl md:text-2xl font-black text-slate-800 dark:text-white mt-1">
+                  {loading ? "--" : stats.synced}
+              </p>
+            </div>
+          </Link>
 
-          {/* Card 3: Students */}
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-colors">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Students</p>
-            <p className="text-xl md:text-2xl font-black text-slate-800 dark:text-white">
-                {loading ? "--" : stats.students}
-            </p>
-          </div>
+          {/* Card 3: Students (Emerald Hover) -> Links to /masterlist */}
+          <Link href="/masterlist" className="block">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all duration-200 hover:bg-emerald-50 dark:hover:bg-slate-800 hover:border-emerald-200 cursor-pointer h-full">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Students</p>
+              <p className="text-xl md:text-2xl font-black text-slate-800 dark:text-white mt-1">
+                  {loading ? "--" : stats.students}
+              </p>
+            </div>
+          </Link>
 
-          {/* Card 4: TOTAL SCORE (UPDATED FOR GREEN GOAL) */}
-          <div className="relative group bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all hover:shadow-md cursor-default">
+          {/* Card 4: TOTAL SCORE (Subtle Hover + Tooltip) */}
+          <div className="relative group bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all duration-200 hover:bg-slate-50 dark:hover:bg-slate-800 hover:shadow-md cursor-default h-full">
             <div className="flex justify-between items-start">
                <div>
                   <div className="flex items-center gap-2 mb-1">

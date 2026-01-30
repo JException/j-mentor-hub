@@ -77,21 +77,34 @@ export default function GroupsPage() {
     loadData();
   }, []); 
 
-  const handleTogglePin = async (id: string, status: boolean) => {
+const handleTogglePin = async (id: string, currentStatus: boolean) => {
     try {
-      await togglePinGroup(id, status);
-      await loadData(); 
+      // 1. Flip the status here
+      const newStatus = !currentStatus;
+      
+      // 2. Call the server action with the NEW status
+      const res = await togglePinGroup(id, newStatus);
+      
+      // 3. Check if server actually succeeded
+      if (res) {
+        await loadData(); // Reload from DB
+        router.refresh(); // Force Next.js to clear cache
+      }
     } catch (error) {
       console.error("Pin Error:", error);
     }
   };
 
-  const sortedGroups = [...groups].sort((a, b) => {
+ const sortedGroups = [...groups].sort((a, b) => {
+    // Pinned always comes first
     if (a.isPinned && !b.isPinned) return -1;
     if (!a.isPinned && b.isPinned) return 1;
 
+    // Then handle other sorts
     if (sortBy === 'alphabetical') return a.thesisTitle.localeCompare(b.thesisTitle);
     if (sortBy === 'group') return a.groupName.localeCompare(b.groupName);
+    
+    // Default: Newest
     return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
   });
 
@@ -188,28 +201,44 @@ export default function GroupsPage() {
     setFormData({ ...formData, members: newMembers });
   };
 
-  return (
+return (
     <div className="max-w-7xl mx-auto space-y-12 p-6 pb-20">
       
-      {/* HEADER WITH ACTION BUTTON */}
-      <div className="flex flex-col md:flex-row justify-between items-end gap-6 px-2">
-        <header>
-          <h1 className="text-6xl font-medium tracking-tight text-slate-800">
-            Thesis <span className="text-slate-300 italic">Groups</span>
-          </h1>
-          <p className="text-slate-500 mt-2 font-medium">Manage active mentoring groups, advisers, and sections.</p>
-        </header>
+      {/* HEADER SECTION */}
+      <header className="px-2">
+        <h1 className="text-6xl font-medium tracking-tight text-slate-800">
+          Thesis <span className="text-slate-300 italic">Groups</span>
+        </h1>
+        <p className="text-slate-500 mt-2 font-medium">Manage active mentoring groups, advisers, and sections.</p>
+      </header>
 
-        {/* Toggle Button */}
-        {!showForm && (
+      {/* ACTIONS & SORTING ROW */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 px-2">
+        {/* Register Button - Left Side */}
+        <div className="w-full md:w-auto">
+          {!showForm && (
             <button 
-                onClick={() => setShowForm(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-bold shadow-lg hover:shadow-blue-200 hover:-translate-y-1 transition-all flex items-center gap-2"
+              onClick={() => setShowForm(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-bold shadow-lg hover:shadow-blue-200 hover:-translate-y-1 transition-all flex items-center justify-center gap-2 w-full md:w-auto"
             >
-                <Plus size={20} strokeWidth={3} />
-                REGISTER NEW GROUP
+              <Plus size={20} strokeWidth={3} />
+              REGISTER NEW GROUP
             </button>
-        )}
+          )}
+        </div>
+
+        {/* Sort Dropdown - Right Side */}
+        <div className="w-full md:w-auto">
+          <select 
+            value={sortBy} 
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="bg-white border border-slate-200 px-6 py-4 rounded-2xl font-bold text-xs outline-none shadow-sm cursor-pointer hover:border-blue-300 transition-all w-full md:w-auto appearance-none"
+          >
+            <option value="newest">Sort by: Newest</option>
+            <option value="alphabetical">Sort by: Title (A-Z)</option>
+            <option value="group">Sort by: Group Name</option>
+          </select>
+        </div>
       </div>
 
       {/* CONDITIONAL FORM SECTION */}
@@ -414,18 +443,7 @@ export default function GroupsPage() {
       </section>
       )}
 
-      {/* SORTING CONTROLS */}
-      <div className="flex justify-end px-2">
-        <select 
-          value={sortBy} 
-          onChange={(e) => setSortBy(e.target.value as any)}
-          className="bg-white border border-slate-200 px-6 py-3 rounded-2xl font-bold text-xs outline-none shadow-sm cursor-pointer hover:border-blue-300 transition-all"
-        >
-          <option value="newest">Sort by: Newest</option>
-          <option value="alphabetical">Sort by: Title (A-Z)</option>
-          <option value="group">Sort by: Group Name</option>
-        </select>
-      </div>
+
 
       {/* GROUPS LIST */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -501,16 +519,20 @@ export default function GroupsPage() {
                   {/* Action Buttons */}
                   <div className="flex gap-2 relative z-10">
                     <button 
-                      onClick={(e) => { e.stopPropagation(); handleTogglePin(group._id, group.isPinned); }}
-                      className={`p-3 rounded-xl transition-all ${group.isPinned ? 'bg-amber-100 text-amber-600 shadow-sm' : 'bg-white/50 text-slate-300 hover:text-amber-600 hover:bg-amber-50'}`}
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        handleTogglePin(group._id, group.isPinned); 
+                      }}
+                      className={`p-3 rounded-xl transition-all ${
+                        group.isPinned 
+                          ? 'bg-amber-100 text-amber-600 shadow-sm' 
+                          : 'bg-white/50 text-slate-300 hover:text-amber-600 hover:bg-amber-50'
+                      }`}
                     >
-                      <Pin size={18} className={group.isPinned ? "fill-current" : "-rotate-45"} />
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); handleEdit(group); }} className="p-3 bg-white/50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
-                      <Edit3 size={18}/>
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); handleDelete(group._id); }} className="p-3 bg-white/50 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
-                      <Trash2 size={18}/>
+                      <Pin 
+                        size={18} 
+                        className={group.isPinned ? "fill-current" : "-rotate-45"} 
+                      />
                     </button>
                   </div>
                 </div>

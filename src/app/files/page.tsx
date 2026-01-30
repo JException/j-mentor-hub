@@ -159,7 +159,7 @@ export default function FilesPage() {
           <FolderOpen className="text-blue-600" size={32} />
           Files Repository
         </h1>
-        <p className="text-slate-500 mt-2">Secure Vercel Blob Storage</p>
+        <p className="text-slate-500 mt-2">Manage thesis documents!</p>
         
         <div className="mt-6 relative max-w-lg">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />

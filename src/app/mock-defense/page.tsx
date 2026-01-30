@@ -348,7 +348,7 @@ export default function MockDefensePage() {
           </div>
           <div className="flex-1 bg-white rounded-xl overflow-hidden">
                         <embed 
-            src={`${previewUrl}#toolbar=0`} 
+            src={`${previewUrl}`} 
             className="w-full h-full" 
             type="application/pdf" 
 />
@@ -360,8 +360,6 @@ export default function MockDefensePage() {
   );
 }
 
-// --- SUB-COMPONENT: AGENDA COLUMN ---
-// --- SUB-COMPONENT: AGENDA COLUMN ---
 function AgendaColumn({ title, icon, groups, onOpenGrade, onPreview, getAverage, onEdit, onDelete }: any) {
   return (
     <div>
