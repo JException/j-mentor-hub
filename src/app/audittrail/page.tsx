@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Search, History, Globe, Clock, Loader2, Database, Lock, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Search, History, Loader2, Lock, ShieldCheck, ArrowRight, AlertTriangle, Clock } from 'lucide-react';
 import { getAuditLogs, clearAuditLogs } from "@/app/actions";
 
 export default function AuditTrailPage() {
@@ -13,89 +13,168 @@ export default function AuditTrailPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const ADMIN_PASSWORD = "jjcp1234"; 
+  
+  // --- RATE LIMITING STATE ---
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState(""); 
 
-  // Check if already authenticated in this session
+  const ADMIN_PASSWORD = "11groups"; 
+  const MAX_ATTEMPTS = 5;
+  const LOCKOUT_DURATION = 15 * 60 * 1000; 
+
+  // 1. Initial Load: Check Auth & Lockout Status
   useEffect(() => {
+    // Check Auth
     const authStatus = localStorage.getItem('audit_auth');
     if (authStatus === 'true') {
       setIsAuthenticated(true);
       fetchLogs();
     }
+
+    // Check Lockout
+    const storedAttempts = localStorage.getItem('audit_failed_attempts');
+    const storedLockout = localStorage.getItem('audit_lockout_until');
+
+    if (storedAttempts) setFailedAttempts(parseInt(storedAttempts));
+    
+    if (storedLockout) {
+      const lockoutTime = parseInt(storedLockout);
+      if (lockoutTime > Date.now()) {
+        setLockoutUntil(lockoutTime);
+        setError("Account locked due to too many failed attempts.");
+      } else {
+        localStorage.removeItem('audit_failed_attempts');
+        localStorage.removeItem('audit_lockout_until');
+        setFailedAttempts(0);
+      }
+    }
   }, []);
+
+  // 2. Countdown Timer Effect
+  useEffect(() => {
+    if (!lockoutUntil) return;
+
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const diff = lockoutUntil - now;
+
+      if (diff <= 0) {
+        setLockoutUntil(null);
+        setFailedAttempts(0);
+        localStorage.removeItem('audit_failed_attempts');
+        localStorage.removeItem('audit_lockout_until');
+        setError("");
+        clearInterval(timer);
+      } else {
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        setTimeLeft(`${minutes}m ${seconds}s`);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [lockoutUntil]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    if (lockoutUntil) return;
+
     if (password === ADMIN_PASSWORD) {
       setIsAuthenticated(true);
       localStorage.setItem('audit_auth', 'true');
+      
+      localStorage.removeItem('audit_failed_attempts');
+      localStorage.removeItem('audit_lockout_until');
+      setFailedAttempts(0);
+      setError("");
+      
       fetchLogs();
     } else {
-      setError("Incorrect administrator password.");
-      setPassword("");
+      const newAttempts = failedAttempts + 1;
+      setFailedAttempts(newAttempts);
+      localStorage.setItem('audit_failed_attempts', newAttempts.toString());
+      setPassword(""); 
+
+      if (newAttempts >= MAX_ATTEMPTS) {
+        const lockUntil = Date.now() + LOCKOUT_DURATION;
+        setLockoutUntil(lockUntil);
+        localStorage.setItem('audit_lockout_until', lockUntil.toString());
+        setError("Too many failed attempts. Access locked.");
+      } else {
+        setError(`Incorrect password. ${MAX_ATTEMPTS - newAttempts} attempts remaining.`);
+      }
     }
   };
 
   const fetchLogs = async () => {
     setLoading(true);
+    // Make sure this action returns ALL logs, sorted by newest
     const data = await getAuditLogs();
-    // DEBUG: Check your browser console to see the raw data structure
-    console.log("Raw Audit Data:", data); 
     setLogs(data);
     setLoading(false);
   };
 
-  // --- 1. RENDER PASSWORD PROMPT IF NOT AUTHENTICATED ---
   if (!isAuthenticated) {
     return (
       <div className="h-[70vh] flex items-center justify-center animate-in fade-in zoom-in duration-500">
         <div className="bg-white p-10 rounded-[40px] shadow-2xl shadow-blue-100 border border-slate-100 w-full max-w-md text-center">
-          <div className="w-20 h-20 bg-blue-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
-            <Lock className="text-blue-600" size={32} />
+          <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 ${lockoutUntil ? 'bg-red-50' : 'bg-blue-50'}`}>
+            {lockoutUntil ? <AlertTriangle className="text-red-500" size={32} /> : <Lock className="text-blue-600" size={32} />}
           </div>
-          <h2 className="text-2xl font-black text-slate-900 mb-2">Restricted Access</h2>
-          <p className="text-slate-500 mb-8 font-medium">Please enter the administrator password to view the security audit logs.</p>
-          
+          <h2 className="text-2xl font-black text-slate-900 mb-2">
+            {lockoutUntil ? "System Locked" : "Restricted Access"}
+          </h2>
+          <p className="text-slate-500 mb-8 font-medium">
+            {lockoutUntil ? `Please wait before trying again.` : "Please enter the administrator password to view the security audit logs."}
+          </p>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="relative">
               <input 
                 type="password"
-                placeholder="Enter Password"
+                placeholder={lockoutUntil ? "Locked" : "Enter Password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent focus:border-blue-500/20 focus:bg-white rounded-2xl outline-none transition-all font-bold text-center text-slate-700"
-                autoFocus
+                disabled={!!lockoutUntil}
+                className={`w-full px-6 py-4 border-2 rounded-2xl outline-none transition-all font-bold text-center text-slate-700
+                  ${lockoutUntil ? 'bg-slate-100 border-slate-200 cursor-not-allowed opacity-50' : 'bg-slate-50 border-transparent focus:border-blue-500/20 focus:bg-white'}`}
+                autoFocus={!lockoutUntil}
               />
             </div>
-            {error && <p className="text-red-500 text-xs font-bold animate-bounce">{error}</p>}
+            {lockoutUntil ? (
+              <div className="bg-red-50 text-red-600 py-3 px-4 rounded-xl font-bold text-sm animate-pulse flex items-center justify-center gap-2">
+                 <Clock size={16} /> Try again in: {timeLeft}
+              </div>
+            ) : (
+              error && <p className="text-red-500 text-xs font-bold animate-bounce">{error}</p>
+            )}
             <button 
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 group"
+              disabled={!!lockoutUntil}
+              className={`w-full font-black py-4 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 group
+                ${lockoutUntil ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'}`}
             >
-              Verify Identity <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+              {lockoutUntil ? "Access Denied" : "Verify Identity"} 
+              {!lockoutUntil && <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />}
             </button>
           </form>
           <p className="mt-8 text-[10px] text-slate-400 uppercase tracking-widest font-black flex items-center justify-center gap-2">
-            <ShieldCheck size={12} /> Secure Audit System v3.0
+            <ShieldCheck size={12} /> Secure Audit System v3.1
           </p>
         </div>
       </div>
     );
   }
 
-  // --- 2. RENDER ACTUAL CONTENT IF AUTHENTICATED ---
+  // --- FILTER LOGIC ---
   const filteredLogs = logs.filter((log: any) => {
-    // Optional chaining and fallback strings prevent "undefined" crashes
-    const description = log?.description?.toLowerCase() ?? "";
-    const ipAddress = log?.ipAddress ?? "";
+    // FIX: Check BOTH 'description' (old logs) and 'details' (new security logs)
+    const description = (log?.description || log?.details || "").toLowerCase();
+    const ipAddress = (log?.ipAddress || "").toLowerCase();
     const module = log?.module ?? "Unknown";
-    
     const searchTerm = search.toLowerCase();
     
-    const matchesSearch = 
-      description.includes(searchTerm) || 
-      ipAddress.includes(searchTerm);
-      
+    const matchesSearch = description.includes(searchTerm) || ipAddress.includes(searchTerm);
     const matchesModule = filterModule === "All" || module === filterModule;
     
     return matchesSearch && matchesModule;
@@ -110,28 +189,28 @@ export default function AuditTrailPage() {
           </h1>
           <p className="text-slate-500 font-medium mt-1">Authorized View: Monitoring system modifications.</p>
         </div>
-        
-        <button 
-          onClick={() => {
-            localStorage.removeItem('audit_auth');
-            window.location.reload();
-          }}
-          className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors"
-        >
-          Logout Session
-        </button>
-
-        <button 
-  onClick={async () => {
-    if(confirm("Clear all logs?")) {
-       await clearAuditLogs(); 
-       window.location.reload();
-    }
-  }}
-  className="text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-red-600 ml-4"
->
-  Clear Logs
-</button>
+        <div className="flex items-center gap-4">
+            <button 
+                onClick={async () => {
+                    if(confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
+                        await clearAuditLogs(); 
+                        window.location.reload();
+                    }
+                }}
+                className="text-[10px] font-black uppercase tracking-widest text-red-400 hover:text-red-600"
+            >
+            Clear Logs
+            </button>
+            <button 
+            onClick={() => {
+                localStorage.removeItem('audit_auth');
+                window.location.reload();
+            }}
+            className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-500 transition-colors"
+            >
+            Logout Session
+            </button>
+        </div>
       </header>
 
       {/* FILTER BOX */}
@@ -151,6 +230,7 @@ export default function AuditTrailPage() {
           onChange={(e) => setFilterModule(e.target.value)}
         >
           <option value="All">All Modules</option>
+          <option value="System Gatekeeper">System Gatekeeper</option> {/* ADDED THIS */}
           <option value="Groups">Groups</option>
           <option value="Mock Defense">Mock Defense</option>
           <option value="Deliverables">Deliverables</option>
@@ -179,20 +259,37 @@ export default function AuditTrailPage() {
                 </tr>
               ) : filteredLogs.map((log: any, index: number) => (
                 <tr key={log._id} className="hover:bg-blue-50/40 transition-colors group">
-                  <td className="p-6 text-slate-300 font-mono text-xs">{logs.length - index}</td>
-                  <td className="p-6 font-mono text-sm text-blue-600 font-bold">{log?.ipAddress ?? "N/A"}</td>
+                  <td className="p-6 text-slate-300 font-mono text-xs">{filteredLogs.length - index}</td>
+                  
+                  {/* IP ADDRESS COLUMN */}
+                  <td className="p-6 font-mono text-xs font-bold">
+                    {log?.ipAddress ? (
+                       <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-md">{log.ipAddress}</span>
+                    ) : (
+                       <span className="text-slate-300">N/A</span>
+                    )}
+                  </td>
+
+                  {/* MODULE BADGE - Now supports System Gatekeeper colors */}
                   <td className="p-6">
                     <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${
                         log.module === 'Mock Defense' ? 'bg-purple-50 text-purple-600' :
                         log.module === 'Groups' ? 'bg-emerald-50 text-emerald-600' :
+                        log.module === 'System Gatekeeper' ? 'bg-orange-50 text-orange-600' : // Alert color
                         'bg-slate-100 text-slate-600'
                     }`}>
                       {log?.module ?? "Unknown"}
                     </span>
                   </td>
-                  <td className="p-6 font-semibold text-slate-700">{log?.description ?? "No description provided"}</td>
-                  <td className="p-6 text-slate-400 text-xs">
-                    {log.createdAt ? new Date(log.createdAt).toLocaleString() : "N/A"}
+
+                  {/* DESCRIPTION - Supports both 'description' and 'details' */}
+                  <td className="p-6 font-semibold text-slate-700 text-sm">
+                    {log?.description || log?.details || "No description provided"}
+                  </td>
+                  
+                  <td className="p-6 text-slate-400 text-xs font-medium">
+                    {log.createdAt ? new Date(log.createdAt).toLocaleString() : 
+                     log.timestamp ? new Date(log.timestamp).toLocaleString() : "N/A"}
                   </td>
                 </tr>
               ))}
