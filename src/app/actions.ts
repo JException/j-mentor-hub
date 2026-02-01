@@ -492,8 +492,6 @@ export async function editDefenseGrade(groupId: string, gradeId: string, updated
   }
 }
 
-// In src/app/actions.ts
-
 export async function recordAuditLog(module: string, action: string, description: string, details?: any) {
   try {
     await dbConnect();
