@@ -314,7 +314,7 @@ export default function DeliverablesPage() {
         const result = await createTask(formData);
         if (result.success) {
           setTasks(prev => [{ 
-            id: result.newId, 
+            id: result.id, 
             name: formData.name, 
             deadline: formData.deadline, 
             type: formData.type as any 

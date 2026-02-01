@@ -6,7 +6,7 @@ import "./globals.css";
 import { 
   Users, Calendar, LayoutDashboard, ChevronLeft, ChevronRight, GraduationCap, 
   Medal, List, CheckSquare, Menu, X, 
-  FileText, Presentation // <--- Added Presentation icon
+  FileText, Presentation, History as HistoryIcon
 } from 'lucide-react';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -29,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     { name: 'Files Repository', path: '/files', icon: FileText }, 
     { name: 'Leaderboards', path: '/leaderboards', icon: Medal },
     { name: 'Masterlist', path: '/masterlist', icon: List },
+    { name: 'Audit Trail', path: '/audittrail', icon: HistoryIcon },
   ];
 
   return (

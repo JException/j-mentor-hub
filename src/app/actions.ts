@@ -4,8 +4,9 @@ import { dbConnect } from "@/lib/db";
 import Group from "@/models/Group";
 import Task from "@/models/Task";
 import Progress from '@/models/Progress';
+import AuditLog  from "@/models/AuditLog"; 
 import { revalidatePath } from "next/cache";
-import mongoose from "mongoose"; 
+import mongoose from "mongoose";
 
 // --- DEFINING THE INTERFACE ---
 export interface GroupData {
@@ -38,6 +39,7 @@ export async function getLeaderboardData() {
   const tasks = await Task.find({}).sort({ deadline: 1 }).lean(); 
   const progress = await Progress.find({}).lean();
 
+  // ✅ FIX: Sanitize all returns
   return {
     groups: JSON.parse(JSON.stringify(groups)),
     tasks: JSON.parse(JSON.stringify(tasks)),
@@ -53,52 +55,39 @@ export async function updateGroupProgress(groupId: string, taskId: string, statu
       { status, lastUpdated: new Date() },
       { upsert: true, new: true }
     );
+    
+    await recordAuditLog("Leaderboard", "UPDATE", `Updated progress to ${status}`, { groupId, taskId });
+    
+    revalidatePath('/leaderboards');
     return { success: true };
   } catch (error) {
-    console.error("Update failed", error);
     return { success: false };
   }
 }
 
 // --- GROUP MANAGEMENT ---
-// --- GROUP MANAGEMENT ---
+
 export async function saveGroupToDB(formData: GroupData) {
   try {
     await dbConnect();
-    
-    // 🔍 DEBUG: Log what we are trying to save
-    console.log("Saving Group Data:", formData);
-
-    await Group.create({
+    const newGroup = await Group.create({
       groupName: formData.groupName,
       thesisTitle: formData.thesisTitle,
       members: formData.members,
-      sections: formData.sections || [], // Ensure array is not undefined
-      
-      // ✅ FIX 1: Map "assignPM" (Frontend) to "projectManager" (Schema)
+      sections: formData.sections || [],
       projectManager: formData.assignPM || "",
-
-      // ✅ FIX 2: Structure "Advisers" as a nested object
-      advisers: {
-        seAdviser: formData.se2Adviser || "",
-        pmAdviser: formData.pmAdviser || ""
-      },
-      
-      // ✅ FIX 3: Structure "Schedule" as a nested object
-      consultationSchedule: {
-        day: formData.consultationDay || "",
-        time: formData.consultationTime || ""
-      },
-
+      advisers: { seAdviser: formData.se2Adviser || "", pmAdviser: formData.pmAdviser || "" },
+      consultationSchedule: { day: formData.consultationDay || "", time: formData.consultationTime || "" },
       isPinned: false,
       createdAt: new Date().toISOString()
     });
+
+    await recordAuditLog("Groups", "CREATE", `Created group: ${formData.groupName}`);
     
     revalidatePath('/groups'); 
     return { success: true };
   } catch (error) {
-    console.error("Failed to save group:", error);
-    return { success: false, error: "Database save failed" };
+    return { success: false };
   }
 }
 
@@ -124,21 +113,22 @@ export async function getGroupsFromDB() {
     // Fetch data and convert to plain JS objects
     const groups = await Group.find({}).sort({ createdAt: -1 }).lean();
     
-    return groups.map((group: any) => ({
+    // Process the groups to handle nested fields and nulls
+    const formattedGroups = groups.map((group: any) => ({
       ...group,
       // 1. Convert Root ID
       _id: group._id.toString(),
       assignPM: group.projectManager || group.assignPM || "",
-      // 2. 👇 UNPACK ADVISERS (Fix for UI showing dashes)
-      // If the nested object exists, grab the value. If not, fallback to the old flat field.
+      
+      // 2. UNPACK ADVISERS
       se2Adviser: group.advisers?.seAdviser || group.se2Adviser || "",
       pmAdviser: group.advisers?.pmAdviser || group.pmAdviser || "",
 
-      // 3. 👇 UNPACK SCHEDULE (Fix for UI showing "Unset")
+      // 3. UNPACK SCHEDULE
       consultationDay: group.consultationSchedule?.day || group.consultationDay || "",
       consultationTime: group.consultationSchedule?.time || group.consultationTime || "",
 
-      // 4. Convert Dates (Safety check)
+      // 4. Convert Dates
       createdAt: group.createdAt ? new Date(group.createdAt).toISOString() : null,
       updatedAt: group.updatedAt ? new Date(group.updatedAt).toISOString() : null,
       mockDefenseDate: group.mockDefenseDate ? new Date(group.mockDefenseDate).toISOString() : null,
@@ -168,6 +158,9 @@ export async function getGroupsFromDB() {
         timestamp: grade.timestamp ? new Date(grade.timestamp).toISOString() : null
       }))
     }));
+
+    // ✅ FIX: "Nuclear" Deep Clean
+    return JSON.parse(JSON.stringify(formattedGroups));
 
   } catch (error) {
     console.error("Failed to fetch groups:", error);
@@ -205,11 +198,14 @@ export async function updateGroupSchedule(groupId: string, scheduleData: any) {
 export async function deleteGroup(groupId: string) {
   try {
     await dbConnect();
-    await Group.findByIdAndDelete(groupId);
+    const group = await Group.findById(groupId);
+    if (group) {
+      await Group.findByIdAndDelete(groupId);
+      await recordAuditLog("Groups", "DELETE", `Deleted group: ${group.groupName}`, { groupId: groupId });
+    }
     revalidatePath('/groups'); 
     return { success: true };
   } catch (error) {
-    console.error("Delete failed:", error);
     return { success: false };
   }
 }
@@ -218,26 +214,29 @@ export async function updateGroup(groupId: string, formData: GroupData) {
   try {
     await dbConnect();
     await Group.findByIdAndUpdate(groupId, formData);
+    await recordAuditLog("Groups", "UPDATE", `Updated group details for: ${formData.groupName}`);
     revalidatePath('/groups');
     return { success: true };
   } catch (error) {
-    console.error("Update failed:", error);
     return { success: false };
   }
 }
 
 // --- TASKS / DELIVERABLES ---
+
 export async function getTasks() {
   try {
     await dbConnect(); 
-    const tasks = await Task.find({}).sort({ createdAt: -1 });
+    const tasks = await Task.find({}).sort({ createdAt: -1 }).lean();
 
-    return tasks.map(task => ({
+    const formattedTasks = tasks.map((task: any) => ({
       id: task._id.toString(), 
       name: task.name,
       deadline: task.deadline,
       type: task.type
     }));
+
+    return JSON.parse(JSON.stringify(formattedTasks));
   } catch (error) {
     console.error("Failed to fetch tasks:", error);
     return [];
@@ -253,23 +252,25 @@ export async function createTask(data: any) {
       type: data.type
     });
 
+    await recordAuditLog("Deliverables", "CREATE", `Added new deliverable: ${data.name}`);
     revalidatePath('/deliverables');
-    return { success: true, newId: newTask._id.toString() };
+    return { success: true, id: newTask._id.toString() };
   } catch (error) {
-    console.error("Failed to create task:", error);
-    return { success: false, error: 'Database Error' };
+    return { success: false };
   }
 }
 
 export async function deleteTask(taskId: string) {
   try {
     await dbConnect();
+    const task = await Task.findById(taskId);
     await Task.findByIdAndDelete(taskId);
+    
+    await recordAuditLog("Deliverables", "DELETE", `Removed deliverable: ${task?.name || taskId}`);
     revalidatePath("/deliverables");
     return { success: true };
   } catch (error) {
-    console.error("Failed to delete task:", error);
-    return { success: false, error };
+    return { success: false };
   }
 }
 
@@ -293,72 +294,86 @@ export async function getDeliverablesFromDB() {
     await dbConnect();
     const tasks = await Task.find({}).sort({ deadline: 1 }).lean();
 
-    return tasks.map((task: any) => ({
+    const plainTasks = tasks.map((task: any) => ({
       id: task._id.toString(),
       taskName: task.name,      
       deadline: task.deadline,
       type: task.type
     }));
+
+    return JSON.parse(JSON.stringify(plainTasks));
   } catch (error) {
     console.error("Failed to fetch deliverables:", error);
     return [];
   }
 }
 
-// --- FILE UPLOAD ACTIONS (FIXED TO BYPASS SCHEMA) ---
+// --- FILE MANAGEMENT (UPDATED FIX) ---
 
-// 1. ADD FILE TO GROUP
 export async function addFileToGroup(groupId: string, fileUrl: string) {
   try {
-    console.log("SERVER: Starting DB Connection...");
     await dbConnect();
 
-    // ⭐ SAFE CHECK: Ensure DB is connected
-    if (!mongoose.connection.db) {
-        throw new Error("Database connection failed or not ready.");
-    }
-
-    console.log("SERVER: Connected. Searching for Group:", groupId);
-
     if (!groupId || !mongoose.Types.ObjectId.isValid(groupId)) {
-      return { success: false, error: "Invalid Group ID format" };
+      return { success: false, error: "Invalid Group ID" };
     }
 
-    const newFile = {
-      fileId: new mongoose.Types.ObjectId().toString(),
-      name: `Draft - ${new Date().toLocaleDateString('en-US')}`,
-      url: fileUrl,
-      uploadDate: new Date().toISOString(),
-      type: 'PDF'
-    };
+    // 1. Define primitive strings first (Safety Step)
+    const safeFileId = new mongoose.Types.ObjectId().toString();
+    const safeName = `Draft - ${new Date().toLocaleDateString()}`;
+    const safeDate = new Date().toISOString();
+    const safeType = 'PDF';
 
-    // 🛑 BYPASS SCHEMA: Use raw MongoDB driver
-    const result = await mongoose.connection.db
-      .collection('groups') 
-      .updateOne(
-        { _id: new mongoose.Types.ObjectId(groupId) },
-        // ⭐ ADDED "as any" HERE TO FIX SQUIGGLY LINE
-        { $push: { files: newFile } } as any 
-      );
+    // 2. Update Database
+    const updatedGroup = await Group.findByIdAndUpdate(
+      groupId,
+      { 
+        $push: { 
+          files: {
+            fileId: safeFileId,
+            name: safeName,
+            url: fileUrl,
+            uploadDate: safeDate,
+            type: safeType
+          } 
+        } 
+      },
+      { new: true } 
+    );
 
-    if (result.matchedCount === 0) {
-      console.error("SERVER ERROR: Group not found with ID:", groupId);
-      return { success: false, error: "Group not found in DB" };
+    if (!updatedGroup) {
+      return { success: false, error: "Group not found" };
     }
 
-    console.log("SERVER: Success! File saved using raw driver.");
-    revalidatePath('/files'); 
-    
-    return { success: true, file: newFile };
+    // 3. Log Audit
+    await recordAuditLog(
+      "Files", 
+      "UPLOAD", 
+      `Uploaded file to group: ${updatedGroup.groupName}`,
+      { groupId, fileName: safeName }
+    );
+
+    revalidatePath('/files');
+
+    // 4. ✅ RETURN MANUAL OBJECT - "Nuclear Fix"
+    // We construct a brand new object to ensure no Mongoose Hidden Properties exist.
+    return JSON.parse(JSON.stringify({ 
+      success: true, 
+      file: {
+        fileId: safeFileId,
+        name: safeName,
+        url: fileUrl,
+        uploadDate: safeDate,
+        type: safeType
+      }
+    }));
 
   } catch (error: any) {
-    console.error("SERVER CRASH ERROR:", error); 
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return { success: false, error: errorMessage };
+    console.error("Upload Error:", error);
+    return { success: false, error: error.message };
   }
 }
 
-// 2. DELETE FILE FROM GROUP
 export async function removeFileFromGroup(groupId: string, fileId: string) {
   try {
     await dbConnect();
@@ -377,48 +392,28 @@ export async function removeFileFromGroup(groupId: string, fileId: string) {
       );
 
     revalidatePath('/files');
-    return { success: true };
+    return JSON.parse(JSON.stringify({ success: true }));
   } catch (error) {
     console.error("Error removing file:", error);
     return { success: false };
   }
 }
 
-
-
-// ... imports
-
-// 1. SAVE SCHEDULE
 // --- MOCK DEFENSE ACTIONS ---
 
-// 1. SAVE SCHEDULE
-export async function updateMockSchedule(scheduleData: { groupId: string, date: string, mode: string }[]) {
+export async function updateMockSchedule(scheduleData: any[]): Promise<{ success: boolean; error?: string }> {
   try {
-    console.log("🔄 Connecting to DB to save schedule...");
-    await dbConnect(); // <--- CRITICAL: Must connect before querying!
-
-    console.log("📦 Received Updates:", scheduleData);
-
+    await dbConnect();
     for (const item of scheduleData) {
-      // Ensure we are not sending empty dates
       if (!item.date) continue;
-
-      const result = await Group.findByIdAndUpdate(
-        item.groupId,
-        {
-          mockDefenseDate: item.date,
-          mockDefenseMode: item.mode
-        },
-        { new: true } // This option returns the updated doc for debugging
-      );
-
-      console.log(`✅ Updated Group ${item.groupId}:`, result ? "Success" : "Not Found");
+      await Group.findByIdAndUpdate(item.groupId, {
+        mockDefenseDate: item.date,
+        mockDefenseMode: item.mode
+      });
     }
 
-    // Revalidate the path so the UI updates immediately
-    // import { revalidatePath } from 'next/cache';
-    // revalidatePath('/mock-defense'); 
-    
+    await recordAuditLog("Mock Defense", "UPDATE", "Updated the defense schedule for multiple groups");
+    revalidatePath('/mock-defense'); 
     return { success: true };
   } catch (e: any) {
     console.error("❌ Save Error:", e);
@@ -426,40 +421,48 @@ export async function updateMockSchedule(scheduleData: { groupId: string, date: 
   }
 }
 
-// 2. SUBMIT GRADE
 export async function submitDefenseGrade(groupId: string, grade: any) {
   try {
-    // @ts-ignore
+    await dbConnect();
     await Group.findByIdAndUpdate(groupId, {
       $push: { mockDefenseGrades: grade }
     });
+    
+    await recordAuditLog(
+      "Mock Defense", "GRADE", 
+      `Submitted grade by ${grade.panelistName}`, 
+      { groupId, scores: grade }
+    );
+    revalidatePath('/mock-defense');
     return { success: true };
   } catch (e) {
-    console.error(e);
-    return { success: false, error: "Failed to submit grade" };
+    return { success: false };
   }
 }
 
-// --- GRADE MANAGEMENT ---
-
-// 3. DELETE A GRADE
 export async function deleteDefenseGrade(groupId: string, gradeId: string) {
   try {
     await dbConnect();
     await Group.findByIdAndUpdate(groupId, {
       $pull: { mockDefenseGrades: { _id: gradeId } }
     });
+
+    await recordAuditLog("Mock Defense", "DELETE", `Deleted a defense grade for Group ID: ${groupId}`, { groupId, gradeId });
+
+    revalidatePath('/mock-defense'); 
     return { success: true };
   } catch (e) {
     return { success: false, error: "Failed to delete grade" };
   }
 }
 
+
 // 4. EDIT A GRADE
 export async function editDefenseGrade(groupId: string, gradeId: string, updatedData: any) {
   try {
     await dbConnect();
-    // We use the positional operator $ to update the specific item in the array
+    
+    // 1. Update the specific grade in the array
     await Group.findOneAndUpdate(
       { "_id": groupId, "mockDefenseGrades._id": gradeId },
       {
@@ -471,9 +474,86 @@ export async function editDefenseGrade(groupId: string, gradeId: string, updated
         }
       }
     );
+
+    // 2. Log the update
+    await recordAuditLog(
+      "Mock Defense",
+      "UPDATE",
+      `Updated grade by panelist ${updatedData.name}`, 
+      { groupId, gradeId, newScores: updatedData }
+    );
+
+    revalidatePath('/mock-defense'); // Ensure UI updates
     return { success: true };
   } catch (e) {
     console.error(e);
     return { success: false, error: "Failed to update grade" };
+  }
+}
+
+// In src/app/actions.ts
+
+export async function recordAuditLog(module: string, action: string, description: string, details?: any) {
+  console.log("------------------------------------------");
+  console.log("🔍 AUDIT DEBUG: Function Called!");
+  console.log("   -> Received Module:", module);
+  console.log("   -> Received Description:", description);
+
+  try {
+    await dbConnect();
+    
+    // 1. Create the object
+    const logEntry = {
+      module: module,
+      action: action,
+      description: description,
+      ipAddress: "127.0.0.1", // temporary hardcode to simplify
+      details: details,
+      createdAt: new Date()
+    };
+
+    // 2. Attempt to save
+    const result = await AuditLog.create(logEntry);
+    console.log("✅ DB SAVE SUCCESS. ID:", result._id);
+    console.log("   -> Saved Data:", JSON.stringify(result));
+
+  } catch (error) {
+    console.error("❌ DB SAVE FAILED:", error);
+  }
+  console.log("------------------------------------------");
+}
+
+export async function getAuditLogs() {
+  try {
+    await dbConnect();
+    const logs = await AuditLog.find({}).sort({ createdAt: -1 }).lean();
+    
+    // DEBUG: Check what we are sending to the frontend
+    if (logs.length > 0) {
+      console.log("📤 FETCHING LOGS. First Log Item Keys:", Object.keys(logs[0]));
+      console.log("   -> First Module Value:", (logs[0] as any).module);
+    }
+    
+    return JSON.parse(JSON.stringify(logs));
+  } catch (error) {
+    console.error("Fetch Error:", error);
+    return [];
+  }
+}
+
+export async function clearAuditLogs() {
+  try {
+    await dbConnect();
+    
+    // Deletes all records in the collection
+    await AuditLog.deleteMany({});
+    
+    // Tells Next.js to refresh the data on the Audit Trail page
+    revalidatePath("/audit-trail"); 
+    
+    return { success: true };
+  } catch (error) {
+    console.error("❌ Failed to clear logs:", error);
+    return { success: false, error: "Failed to clear audit logs." };
   }
 }

@@ -9,6 +9,7 @@ import {
   Printer
 } from 'lucide-react';
 import { getLeaderboardData, updateGroupProgress } from '@/app/actions';
+import { recordAuditLog } from "@/app/actions";
 
 // --- TYPES ---
 interface Group {

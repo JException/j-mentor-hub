@@ -7,6 +7,7 @@ import {
 import { saveGroupToDB, getGroupsFromDB, deleteGroup, updateGroup, togglePinGroup } from "@/app/actions";
 import { useRouter } from 'next/navigation';
 
+
 export default function GroupsPage() {
   const [groups, setGroups] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState<string | null>(null);
@@ -445,16 +446,15 @@ return (
 
 
 
-      {/* GROUPS LIST */}
+     {/* GROUPS LIST */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-       
-{sortedGroups.map((group) => {
+        {sortedGroups.map((group) => {
           // 1. Determine Defense Mode based on PM Adviser
           const isOnline = ONLINE_PMS.includes(group.pmAdviser);
           const isF2F = F2F_PMS.includes(group.pmAdviser);
 
           // 2. Define Dynamic Styles
-          let cardClasses = "bg-white border-slate-200 hover:border-slate-400"; // Default
+          let cardClasses = "bg-white border-slate-200 hover:border-slate-400"; 
           let statusBadge = null;
 
           if (isOnline) {
@@ -472,7 +472,6 @@ return (
               </span>
             );
           } else if (group.isPinned) {
-             // Fallback for pinned if no PM assigned yet
              cardClasses = "border-amber-200 bg-amber-50/10";
           }
 
@@ -485,55 +484,52 @@ return (
                         ${cardClasses}`}
             >
               <div>
-                {/* NEW: Status Badge Display */}
-                {statusBadge}
-
-                <div className="flex justify-between items-start mb-6">
-                  <div className="flex items-center gap-3">
-                        <div className={`h-14 w-14 text-white rounded-2xl flex items-center justify-center font-black text-lg shadow-lg
-                                        transition-all duration-300 group-hover/card:scale-110 
-                                        ${isOnline ? 'bg-yellow-500 shadow-yellow-200' : isF2F ? 'bg-blue-600 shadow-blue-200' : 'bg-slate-900'}`}>
-                          {group.groupName?.substring(0, 2).toUpperCase()}
-                        </div>
-                      
-                      {/* Sections */}
-                      <div className="flex flex-col gap-1">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Section</span>
-                          <div className="flex flex-wrap gap-1">
-                              {group.sections && group.sections.length > 0 ? (
-                                  group.sections.map((section: string, index: number) => (
-                                      <span 
-                                          key={index} 
-                                          className="bg-white/60 text-slate-700 px-2 py-0.5 rounded-md text-[10px] font-bold border border-slate-200/50"
-                                      >
-                                          {section}
-                                      </span>
-                                  ))
-                              ) : (
-                                  <span className="text-slate-400 text-[10px] italic">No Section</span>
-                              )}
-                          </div>
-                      </div>
-                  </div>
+                <div className="flex justify-between items-start">
+                  {statusBadge || <div className="mb-4 h-6" />}
                   
-                  {/* Action Buttons */}
-                  <div className="flex gap-2 relative z-10">
+                  {/* ACTION BUTTONS (PIN, EDIT, DELETE) */}
+                  <div className="flex gap-1 relative z-10">
                     <button 
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        handleTogglePin(group._id, group.isPinned); 
-                      }}
-                      className={`p-3 rounded-xl transition-all ${
-                        group.isPinned 
-                          ? 'bg-amber-100 text-amber-600 shadow-sm' 
-                          : 'bg-white/50 text-slate-300 hover:text-amber-600 hover:bg-amber-50'
-                      }`}
+                      onClick={(e) => { e.stopPropagation(); handleTogglePin(group._id, group.isPinned); }}
+                      className={`p-2 rounded-lg transition-all ${group.isPinned ? 'bg-amber-100 text-amber-600' : 'text-slate-300 hover:text-amber-500'}`}
                     >
-                      <Pin 
-                        size={18} 
-                        className={group.isPinned ? "fill-current" : "-rotate-45"} 
-                      />
+                      <Pin size={16} className={group.isPinned ? "fill-current" : "-rotate-45"} />
                     </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleEdit(group); }}
+                      className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+                    >
+                      <Edit3 size={16} />
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleDelete(group._id); }}
+                      className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 mb-6">
+                    <div className={`h-14 w-14 text-white rounded-2xl flex items-center justify-center font-black text-lg shadow-lg
+                                    transition-all duration-300 group-hover/card:scale-110 
+                                    ${isOnline ? 'bg-yellow-500 shadow-yellow-200' : isF2F ? 'bg-blue-600 shadow-blue-200' : 'bg-slate-900'}`}>
+                      {group.groupName?.substring(0, 2).toUpperCase()}
+                    </div>
+                  
+                  <div className="flex flex-col gap-1">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Section</span>
+                      <div className="flex flex-wrap gap-1">
+                          {group.sections && group.sections.length > 0 ? (
+                              group.sections.map((section: string, index: number) => (
+                                  <span key={index} className="bg-white/60 text-slate-700 px-2 py-0.5 rounded-md text-[10px] font-bold border border-slate-200/50">
+                                      {section}
+                                  </span>
+                              ))
+                          ) : (
+                              <span className="text-slate-400 text-[10px] italic">No Section</span>
+                          )}
+                      </div>
                   </div>
                 </div>
 
@@ -589,6 +585,6 @@ return (
           );
       })}
       </div>
-      </div>
+    </div>
   );
 }

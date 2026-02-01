@@ -10,10 +10,10 @@ import {
   getGroupsFromDB, 
   updateMockSchedule, 
   submitDefenseGrade,
-  deleteDefenseGrade, // Ensure these are imported
-  editDefenseGrade    // Ensure these are imported
+  deleteDefenseGrade, 
+  editDefenseGrade   
 } from "@/app/actions";
-
+import { recordAuditLog } from "@/app/actions";
 // --- TYPES ---
 interface Grade {
   _id?: string; // Added ID for editing/deleting
@@ -100,8 +100,6 @@ export default function MockDefensePage() {
     }
   };
 
-  // --- 3. GRADING LOGIC ---
-  
   // Open modal for NEW grade
   const openGradeModal = (group: Group) => {
     setSelectedGroup(group);

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { getGroupsFromDB, addFileToGroup, removeFileFromGroup } from "@/app/actions"; 
 
+// --- TYPES ---
 interface FileDoc {
   fileId: string;
   name: string;
@@ -20,6 +21,13 @@ interface Group {
   groupName: string;
   thesisTitle: string;
   files?: FileDoc[]; 
+}
+
+// Define the expected response from the server action
+interface UploadResponse {
+  success: boolean;
+  file?: FileDoc;
+  error?: string;
 }
 
 export default function FilesPage() {
@@ -57,6 +65,7 @@ export default function FilesPage() {
       setExpandedGroupId(groupId);
       const group = groups.find(g => g._id === groupId);
       if (group && group.files && group.files.length > 0) {
+        // Automatically select the most recent file
         const latestFile = group.files[group.files.length - 1]; 
         setActiveFileId(latestFile.fileId);
       }
@@ -66,6 +75,7 @@ export default function FilesPage() {
   const handleUploadClick = (e: React.MouseEvent, groupId: string) => {
     e.stopPropagation(); 
     setUploadTargetGroupId(groupId);
+    // Slight delay to ensure state updates before click
     setTimeout(() => {
         if (fileInputRef.current) {
             fileInputRef.current.value = ""; 
@@ -95,15 +105,18 @@ export default function FilesPage() {
 
       const blobData = await response.json();
       
-      if (!response.ok) throw new Error("Upload failed");
+      if (!response.ok) throw new Error(blobData.error || "Upload failed");
 
-      const fileUrl = blobData.url; // This is the permanent Vercel URL
+      const fileUrl = blobData.url; 
 
       // 2. Save URL to MongoDB
-      const result = await addFileToGroup(targetId, fileUrl);
+      // We explicitly cast the result to our expected type
+      const result = await addFileToGroup(targetId, fileUrl) as UploadResponse;
 
       if (result.success && result.file) {
         const newFileDoc = result.file;
+        
+        // Optimistically update the UI
         setGroups(prev => prev.map(g => {
             if(g._id === targetId) {
                 const updatedFiles = [...(g.files || []), newFileDoc];
@@ -113,6 +126,11 @@ export default function FilesPage() {
         }));
         
         setActiveFileId(newFileDoc.fileId);
+        // Optional: Ensure the accordion is open on the group we just uploaded to
+        if (expandedGroupId !== targetId) {
+            setExpandedGroupId(targetId);
+        }
+        
         alert("✅ Upload Successful!");
       } else {
         throw new Error(result.error || "Database save failed"); 
@@ -129,13 +147,17 @@ export default function FilesPage() {
 
   const handleDeleteFile = async (groupId: string, fileId: string) => {
     if(!confirm("Delete this file?")) return;
+    
+    // Optimistic UI Update
     setGroups(prev => prev.map(g => {
       if (g._id === groupId) {
         return { ...g, files: (g.files || []).filter(f => f.fileId !== fileId) };
       }
       return g;
     }));
+    
     if (activeFileId === fileId) setActiveFileId(null);
+    
     await removeFileFromGroup(groupId, fileId);
   };
 
@@ -175,7 +197,10 @@ export default function FilesPage() {
 
       <div className="space-y-4">
         {isLoading ? (
-           <div className="text-center py-12 text-slate-400">Loading database...</div>
+           <div className="text-center py-12 text-slate-400 flex flex-col items-center gap-2">
+             <Loader2 className="animate-spin text-blue-500" size={24} />
+             Loading database...
+           </div>
         ) : filteredGroups.length === 0 ? (
            <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
              No groups found.
@@ -183,6 +208,8 @@ export default function FilesPage() {
         ) : (
           filteredGroups.map(group => {
             const isExpanded = expandedGroupId === group._id;
+            // Create a reversed copy for display so newest files are first (optional)
+            // Note: If you want oldest first, remove .reverse()
             const files = [...(group.files || [])].reverse(); 
             const currentFile = files.find(f => f.fileId === activeFileId);
 
@@ -221,7 +248,7 @@ export default function FilesPage() {
                       disabled={isUploading}
                       className="flex items-center gap-2 bg-slate-900 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isUploading && (uploadTargetGroupId === group._id || expandedGroupId === group._id) ? (
+                      {isUploading && (uploadTargetGroupId === group._id) ? (
                         <>
                           <Loader2 className="animate-spin" size={14} /> Uploading...
                         </>
@@ -251,6 +278,7 @@ export default function FilesPage() {
                       </div>
                     ) : (
                       <div className="space-y-4">
+                        {/* File List Horizontal Scroll */}
                         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
                           {files.map(file => (
                             <div 
@@ -276,6 +304,7 @@ export default function FilesPage() {
                           ))}
                         </div>
 
+                        {/* PDF Viewer */}
                         {currentFile && (
                           <div className="bg-slate-900 rounded-xl overflow-hidden shadow-xl border border-slate-800">
                             <div className="bg-slate-800 px-4 py-2 flex items-center justify-between">
@@ -301,11 +330,18 @@ export default function FilesPage() {
                               </div>
                             </div>
                             <div className="h-[650px] bg-white relative">
-                               <embed 
-                                 src={currentFile.url} 
-                                 type="application/pdf"
+                               <iframe 
+                                 src={`https://docs.google.com/gview?url=${encodeURIComponent(currentFile.url)}&embedded=true`}
                                  className="w-full h-full"
+                                 frameBorder="0"
                                />
+                               {/* Fallback/Alternative embed method if Google Viewer is blocked or fails */}
+                               <object
+                                data={currentFile.url}
+                                type="application/pdf"
+                                className="absolute inset-0 w-full h-full pointer-events-none opacity-0"
+                               >
+                               </object>
                             </div>
                           </div>
                         )}
