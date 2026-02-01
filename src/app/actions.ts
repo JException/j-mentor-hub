@@ -7,6 +7,7 @@ import Progress from '@/models/Progress';
 import AuditLog  from "@/models/AuditLog"; 
 import { revalidatePath } from "next/cache";
 import mongoose from "mongoose";
+import { headers } from "next/headers";
 
 // --- DEFINING THE INTERFACE ---
 export interface GroupData {
@@ -494,33 +495,29 @@ export async function editDefenseGrade(groupId: string, gradeId: string, updated
 // In src/app/actions.ts
 
 export async function recordAuditLog(module: string, action: string, description: string, details?: any) {
-  console.log("------------------------------------------");
-  console.log("🔍 AUDIT DEBUG: Function Called!");
-  console.log("   -> Received Module:", module);
-  console.log("   -> Received Description:", description);
-
   try {
     await dbConnect();
+
+    // 1. Get the headers object (await is required in newer Next.js versions)
+    const headerList = await headers();
     
-    // 1. Create the object
+    // 2. Extract IP (x-forwarded-for usually contains "client, proxy1, proxy2")
+    const forwardedFor = headerList.get("x-forwarded-for");
+    const realIp = forwardedFor ? forwardedFor.split(',')[0].trim() : "127.0.0.1";
+
     const logEntry = {
-      module: module,
-      action: action,
-      description: description,
-      ipAddress: "127.0.0.1", // temporary hardcode to simplify
-      details: details,
+      module,
+      action,
+      description,
+      ipAddress: realIp, 
+      details,
       createdAt: new Date()
     };
-
-    // 2. Attempt to save
-    const result = await AuditLog.create(logEntry);
-    console.log("✅ DB SAVE SUCCESS. ID:", result._id);
-    console.log("   -> Saved Data:", JSON.stringify(result));
-
+    
+    await AuditLog.create(logEntry);
   } catch (error) {
     console.error("❌ DB SAVE FAILED:", error);
   }
-  console.log("------------------------------------------");
 }
 
 export async function getAuditLogs() {
@@ -556,4 +553,8 @@ export async function clearAuditLogs() {
     console.error("❌ Failed to clear logs:", error);
     return { success: false, error: "Failed to clear audit logs." };
   }
+}
+
+function getClientIp() {
+  throw new Error("Function not implemented.");
 }
