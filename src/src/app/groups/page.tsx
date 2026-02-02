@@ -6,7 +6,6 @@ import {
 } from 'lucide-react'; 
 import { saveGroupToDB, getGroupsFromDB, deleteGroup, updateGroup, togglePinGroup } from "@/app/actions";
 import { useRouter } from 'next/navigation';
-import { recordAuditLog } from "@/app/actions";
 
 
 export default function GroupsPage() {

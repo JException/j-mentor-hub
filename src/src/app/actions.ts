@@ -7,8 +7,7 @@ import Progress from '@/models/Progress';
 import AuditLog  from "@/models/AuditLog"; 
 import { revalidatePath } from "next/cache";
 import mongoose from "mongoose";
-import { headers, cookies } from "next/headers"; 
-import { User } from "lucide-react";
+import { headers } from "next/headers";
 
 // --- DEFINING THE INTERFACE ---
 export interface GroupData {
@@ -203,7 +202,7 @@ export async function deleteGroup(groupId: string) {
     const group = await Group.findById(groupId);
     if (group) {
       await Group.findByIdAndDelete(groupId);
-      await recordAuditLog("GROUPS", "DELETE", `Deleted group: ${group.groupName}`);
+      await recordAuditLog("Groups", "DELETE", `Deleted group: ${group.groupName}`, { groupId: groupId });
     }
     revalidatePath('/groups'); 
     return { success: true };
@@ -493,42 +492,23 @@ export async function editDefenseGrade(groupId: string, gradeId: string, updated
   }
 }
 
-export async function recordAuditLog(
-  module: string, 
-  action: string, 
-  description: string, 
-  details?: any, 
-  user?: string 
-) {
+export async function recordAuditLog(module: string, action: string, description: string, details?: any) {
   try {
     await dbConnect();
 
-    // 1. DETERMINE USER IDENTITY
-    let finalUser = user;
-
-    // If no user was passed (which happens in deleteGroup, deleteTask, etc.)
-    // We look inside the Cookies for the "audit_user"
-    if (!finalUser) {
-      const cookieStore = await cookies();
-      const userCookie = cookieStore.get("audit_user");
-      
-      // If found, use it. If not, default to "Guest"
-      finalUser = userCookie ? userCookie.value : "Guest";
-    }
-
-    // 2. GET IP ADDRESS
+    // 1. Get the headers object (await is required in newer Next.js versions)
     const headerList = await headers();
+    
+    // 2. Extract IP (x-forwarded-for usually contains "client, proxy1, proxy2")
     const forwardedFor = headerList.get("x-forwarded-for");
     const realIp = forwardedFor ? forwardedFor.split(',')[0].trim() : "127.0.0.1";
 
-    // 3. CREATE LOG ENTRY
     const logEntry = {
       module,
       action,
       description,
       ipAddress: realIp, 
       details,
-      user: finalUser, // <--- This will now say "Agile Team" instead of "Guest"
       createdAt: new Date()
     };
     
@@ -575,16 +555,4 @@ export async function clearAuditLogs() {
 
 function getClientIp() {
   throw new Error("Function not implemented.");
-}
-
-export async function setAuthCookie(username: string) {
-  const cookieStore = await cookies();
-  
-  // Force set the cookie on the server side
-  cookieStore.set("audit_user", username, { 
-    path: "/", 
-    secure: process.env.NODE_ENV === "production", // False on localhost, True on Vercel
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 // 1 day
-  });
 }

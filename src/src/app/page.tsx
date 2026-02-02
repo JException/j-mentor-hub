@@ -41,9 +41,6 @@ const getNextOccurrence = (dayName: string, timeString: string) => {
 };
 
 export default function DashboardPage() {
-  // --- STATE FOR USER IDENTITY ---
-  const [currentUser, setCurrentUser] = useState("Sir Pura"); 
-  
   const [topGroups, setTopGroups] = useState<any[]>([]); 
   const [deliverables, setDeliverables] = useState<any[]>([]);
   const [consultations, setConsultations] = useState<any[]>([]); 
@@ -65,34 +62,21 @@ export default function DashboardPage() {
   const [lastUpdated, setLastUpdated] = useState("");
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // ✅ FIXED: Updated to check 'audit_user' and listen for events
   useEffect(() => {
-    // 1. Dark Mode Logic
     const savedMode = localStorage.getItem('darkMode') === 'true';
     setIsDarkMode(savedMode);
     if (savedMode) {
       document.documentElement.classList.add('dark');
     }
-
-    // 2. CHECK USER IDENTITY 
-    const checkUser = () => {
-      // Check 'audit_user' first (this is what the Sidebar uses), then fallback
-      const storedUser = localStorage.getItem("audit_user") || localStorage.getItem("currentUser");
-      if (storedUser) {
-        // Remove quotes if they exist (sometimes JSON.stringify adds them)
-        setCurrentUser(storedUser.replace(/^"|"$/g, ''));
-      }
-    };
-
-    // Run immediately
-    checkUser();
-
-    // Listen for login/logout events from other components
-    window.addEventListener('auth-change', checkUser);
-    
-    // Cleanup
-    return () => window.removeEventListener('auth-change', checkUser);
   }, []);
+
+  const toggleDarkMode = () => {
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    localStorage.setItem('darkMode', newMode.toString());
+    if (newMode) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -224,7 +208,7 @@ export default function DashboardPage() {
     ? Math.round((stats.groupsWithFiles / stats.totalGroups) * 100) 
     : 0;
 
-  // --- Check if Goal is Met ---
+  // --- NEW: Check if Goal is Met ---
   const isGoalMet = !loading && stats.maxPossibleScore > 0 && stats.accumulatedScore >= stats.maxPossibleScore;
 
   return (
@@ -236,18 +220,18 @@ export default function DashboardPage() {
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
             <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-slate-800 dark:text-white">
-              JJCP Thesis Mentoring Hub <span className="text-blue-600">4.0</span>
+              JJCP Mentorship Hub <span className="text-blue-600">3.0</span>
             </h1>
             <p className="text-slate-500 dark:text-slate-400 font-medium text-sm md:text-base">
-                {/* DYNAMIC WELCOME MESSAGE */}
-                Welcome back, {currentUser}. Manage your thesis groups.
+                Welcome back, Sir Pura. Manage your thesis groups.
             </p>
           </div>
         </header>
 
-        {/* --- STATS GRID --- */}
+        {/* --- STATS GRID (UPDATED WITH LINKS & HOVER EFFECTS) --- */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           
+          {/* Card 1: Groups (Blue Hover) -> Links to /groups */}
           <Link href="/groups" className="block">
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all duration-200 hover:bg-blue-50 dark:hover:bg-slate-800 hover:border-blue-200 cursor-pointer h-full">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest group-hover:text-blue-500">Total Groups</p>
@@ -257,6 +241,7 @@ export default function DashboardPage() {
             </div>
           </Link>
 
+          {/* Card 2: Synced (Indigo Hover) -> Links to /parser */}
           <Link href="/parser" className="block">
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all duration-200 hover:bg-indigo-50 dark:hover:bg-slate-800 hover:border-indigo-200 cursor-pointer h-full">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Synced Schedules</p>
@@ -266,6 +251,7 @@ export default function DashboardPage() {
             </div>
           </Link>
 
+          {/* Card 3: Students (Emerald Hover) -> Links to /masterlist */}
           <Link href="/masterlist" className="block">
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all duration-200 hover:bg-emerald-50 dark:hover:bg-slate-800 hover:border-emerald-200 cursor-pointer h-full">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Students</p>
@@ -275,11 +261,13 @@ export default function DashboardPage() {
             </div>
           </Link>
 
+          {/* Card 4: TOTAL SCORE (Subtle Hover + Tooltip) */}
           <div className="relative group bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all duration-200 hover:bg-slate-50 dark:hover:bg-slate-800 hover:shadow-md cursor-default h-full">
             <div className="flex justify-between items-start">
                <div>
                   <div className="flex items-center gap-2 mb-1">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Score</p>
+                    {/* GOAL MET BADGE */}
                     {isGoalMet && (
                         <span className="bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded text-[9px] font-bold animate-pulse">
                             GOAL: MET!
@@ -288,6 +276,7 @@ export default function DashboardPage() {
                   </div>
                   
                   <div className="flex items-baseline gap-1">
+                    {/* DYNAMIC COLOR: Green if met, Blue if not */}
                     <p className={`text-xl md:text-2xl font-black transition-colors ${isGoalMet ? "text-green-500 dark:text-green-400" : "text-blue-600 dark:text-blue-400"}`}>
                         {loading ? "--" : stats.accumulatedScore}
                     </p>
@@ -298,6 +287,7 @@ export default function DashboardPage() {
                </div>
             </div>
 
+            {/* PROGRESS BAR (Dynamic Color) */}
             <div className="mt-3 w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                <div 
                  className={`h-full rounded-full transition-all duration-1000 ease-out ${isGoalMet ? "bg-green-500" : "bg-blue-600"}`}
@@ -305,6 +295,7 @@ export default function DashboardPage() {
                />
             </div>
 
+            {/* HOVER TOOLTIP */}
             <div className="absolute top-full right-0 mt-2 w-56 p-4 bg-slate-800 dark:bg-slate-700 text-white text-xs rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 translate-y-2 group-hover:translate-y-0 pointer-events-none group-hover:pointer-events-auto">
                <div className="font-bold mb-2 border-b border-slate-600 pb-2 uppercase tracking-wider text-[10px]">
                  Overall Progress
@@ -498,7 +489,7 @@ export default function DashboardPage() {
                   ))
                ) : (
                   <div className="flex flex-col items-center justify-center h-20 text-slate-400">
-                      <span className="text-xs">No files uploaded yet</span>
+                     <span className="text-xs">No files uploaded yet</span>
                   </div>
                )}
              </div>

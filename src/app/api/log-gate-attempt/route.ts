@@ -1,38 +1,37 @@
 import { NextResponse } from 'next/server';
-import { headers } from 'next/headers';
 import { dbConnect } from '@/lib/db';
 import AuditLog from '@/models/AuditLog'; 
 
 export async function POST(req: Request) {
   try {
     await dbConnect();
-    const { status, attemptCount } = await req.json();
+    const body = await req.json();
+    // Destructure specifically
+    const { status, attemptCount, user } = body;
+
+    console.log("API FINAL RECEIVE:", { status, user, attemptCount }); // Check this log!
+
+    const ip = (req.headers.get('x-forwarded-for') ?? '::1').split(',')[0];
+
+    let description = '';
     
-    // 1. Get IP
-    const headersList = await headers(); 
-    const forwardedFor = headersList.get('x-forwarded-for');
-    const ip = forwardedFor ? forwardedFor.split(',')[0] : '::1'; // Default to local IPv6 if null
+    if (status === 'FAILED') {
+        description = `Security Alert: Failed access attempt #${attemptCount} from IP ${ip}`;
+    } else {
+        // If user is missing here, it means the frontend didn't send it.
+        // But with the new code, it is impossible for 'user' to be undefined if status is SUCCESS.
+        description = `Authorized access granted to ${user || 'System Hub'}.`;
+    }
 
-    // 2. Prepare Data (MATCHING YOUR EXISTING SCHEMA)
-    // We use 'description' instead of 'details' so it shows up in your table automatically.
-    const logData = {
+    await AuditLog.create({
       action: status === 'FAILED' ? 'Login Failed' : 'Login Success',
-      module: 'System Gatekeeper', // This will appear in the Module column
+      module: 'System Gatekeeper',
       ipAddress: ip,
-      description: status === 'FAILED' 
-        ? `Security Alert: Failed access attempt #${attemptCount} from IP ${ip}` 
-        : 'Authorized access granted to System Hub.',
-      // Remove 'timestamp': new Date() -> Let Mongoose use createdAt automatically
-    };
-
-    console.log("📝 WRITING LOG:", logData);
-
-    // 3. Create Entry
-    await AuditLog.create(logData);
+      description: description,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Failed to log attempt:", error);
     return NextResponse.json({ success: false }, { status: 500 });
   }
 }

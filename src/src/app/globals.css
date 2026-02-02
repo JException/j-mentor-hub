@@ -1,0 +1,16 @@
+@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Default (Light Mode) - Forced Everywhere */
+  --background: #f8fafc;
+  --foreground: #171717;
+  color-scheme: light; /* Tells the browser to ignore system dark mode */
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
