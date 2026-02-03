@@ -279,7 +279,7 @@ export default function LoginPage() {
               Enter System <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
             </button>
           </form>
-          <p className="mt-6 text-[10px] text-slate-300 uppercase tracking-wider font-bold">JJCP Internal System v3.0</p>
+          <p className="mt-6 text-[10px] text-slate-300 uppercase tracking-wider font-bold">JJCP Thesis Mentoring Hub 4.0</p>
         </div>
       </div>
     </>
