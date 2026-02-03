@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   Calendar, Video, MapPin, Save, Clock, 
   FileText, MessageSquare, Star, ChevronDown, ChevronUp,
-  Trash2, Edit2 
+  Trash2, Edit2, Download 
 } from 'lucide-react';
+
 import { 
   getGroupsFromDB, 
   updateMockSchedule, 
@@ -170,21 +171,37 @@ export default function MockDefensePage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto pb-20 p-6">
-      
-      {/* HEADER */}
-      <div className="flex justify-between items-end mb-8 border-b pb-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-800">Mock Defense Dashboard</h1>
-          <p className="text-slate-500">Manage schedules and grading for Final Defense</p>
+            <div className="max-w-6xl mx-auto pb-20 p-6">
+              
+              {/* HEADER */}
+              <div className="flex justify-between items-end mb-8 border-b pb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-800">Mock Defense Dashboard</h1>
+            <p className="text-slate-500">Manage schedules and grading for Final Defense</p>
+          </div>
+          
+          <div className="flex gap-2"> {/* 👈 Wrap buttons in a div for layout */}
+            
+            {/* 👇 NEW EXPORT BUTTON */}
+            <button 
+              onClick={() => exportToCSV(groups)}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded-lg transition-colors shadow-sm"
+              title="Download Excel Report"
+            >
+              <Download size={18} /> Export Data
+            </button>
+
+            {/* EXISTING SCHEDULER BUTTON */}
+            <button 
+              onClick={() => setShowScheduler(!showScheduler)}
+              className="flex items-center gap-2 text-blue-600 font-bold hover:bg-blue-50 px-4 py-2 rounded-lg transition-colors"
+            >
+              {showScheduler ? "Hide Scheduler" : "Edit Schedule"} 
+              {showScheduler ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}
+            </button>
+            
+          </div>
         </div>
-        <button 
-          onClick={() => setShowScheduler(!showScheduler)}
-          className="flex items-center gap-2 text-blue-600 font-bold hover:bg-blue-50 px-4 py-2 rounded-lg"
-        >
-          {showScheduler ? "Hide Scheduler" : "Edit Schedule"} {showScheduler ? <ChevronUp/> : <ChevronDown/>}
-        </button>
-      </div>
 
       {/* --- SECTION 1: SCHEDULER (Collapsible) --- */}
       {showScheduler && (
@@ -205,7 +222,10 @@ export default function MockDefensePage() {
                 <input 
                   type="datetime-local" 
                   className="w-full mb-2 p-2 border rounded text-sm"
-                  defaultValue={group.mockDefenseDate ? new Date(group.mockDefenseDate).toISOString().slice(0, 16) : ""}
+                  value={
+                    scheduleChanges[group._id]?.date ?? 
+                    toLocalISOString(group.mockDefenseDate)
+                  }
                   onChange={(e) => handleScheduleChange(group._id, 'date', e.target.value)}
                 />
                 <select 
@@ -475,3 +495,84 @@ function AgendaColumn({ title, icon, groups, onOpenGrade, onPreview, getAverage,
     </div>
   );
 }
+
+// Helper to convert DB date to "YYYY-MM-DDThh:mm" for input fields
+// This preserves YOUR local timezone instead of shifting to UTC
+const toLocalISOString = (dateString?: string) => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  // Get the timezone offset in milliseconds
+  const offset = date.getTimezoneOffset() * 60000; 
+  // Adjust the date to fool the ISO converter
+  const localDate = new Date(date.getTime() - offset);
+  return localDate.toISOString().slice(0, 16);
+};
+
+// --- EXPORT HELPER ---
+const exportToCSV = (groups: Group[]) => {
+  // 1. Define the Column Headers
+  const headers = [
+    "Group Name",
+    "Thesis Title",
+    "Schedule",
+    "Mode",
+    "Panelist Name",
+    "Presentation Score",
+    "Paper Score",
+    "Average",
+    "Feedback / Comments"
+  ];
+
+  // 2. Process the Data (Flattening groups -> rows)
+  const rows: string[] = [];
+
+  groups.forEach(group => {
+    const date = group.mockDefenseDate 
+      ? new Date(group.mockDefenseDate).toLocaleString('en-US') 
+      : "Unscheduled";
+
+    // If no grades, add a row just to show the group exists
+    if (!group.mockDefenseGrades || group.mockDefenseGrades.length === 0) {
+      rows.push([
+        `"${group.groupName}"`,
+        `"${group.thesisTitle || ''}"`,
+        `"${date}"`,
+        group.mockDefenseMode || "F2F",
+        "PENDING",
+        "0", "0", "0",
+        "No grades recorded yet"
+      ].join(","));
+    } else {
+      // Create one row per grade/panelist
+      group.mockDefenseGrades.forEach(grade => {
+        const avg = ((grade.presentationScore + grade.paperScore) / 2).toFixed(1);
+        // Escape quotes inside comments to prevent CSV breaking
+        const safeComment = grade.comment ? grade.comment.replace(/"/g, '""') : "";
+
+        rows.push([
+          `"${group.groupName}"`,
+          `"${group.thesisTitle || ''}"`,
+          `"${date}"`,
+          group.mockDefenseMode || "F2F",
+          `"${grade.panelistName}"`,
+          grade.presentationScore,
+          grade.paperScore,
+          avg,
+          `"${safeComment}"`
+        ].join(","));
+      });
+    }
+  });
+
+  // 3. Combine and Download
+  const csvContent = [headers.join(","), ...rows].join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `Mock_Defense_Grades_Report_${new Date().toISOString().slice(0,10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};

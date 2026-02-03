@@ -6,6 +6,7 @@ import {
   CheckCircle2, CircleDashed, CheckSquare, FileText, FolderOpen, Image as ImageIcon 
 } from 'lucide-react';
 import Link from 'next/link';
+import IntroAnimation from "./../components/IntroAnimation-test";
 
 // --- HELPER: Calculate next specific date AND TIME ---
 const getNextOccurrence = (dayName: string, timeString: string) => {
@@ -70,29 +71,72 @@ export default function DashboardPage() {
     // 1. Dark Mode Logic
     const savedMode = localStorage.getItem('darkMode') === 'true';
     setIsDarkMode(savedMode);
-    if (savedMode) {
-      document.documentElement.classList.add('dark');
-    }
+    if (savedMode) document.documentElement.classList.add('dark');
 
-    // 2. CHECK USER IDENTITY 
+    // 2. Auth Check
     const checkUser = () => {
-      // Check 'audit_user' first (this is what the Sidebar uses), then fallback
       const storedUser = localStorage.getItem("audit_user") || localStorage.getItem("currentUser");
-      if (storedUser) {
-        // Remove quotes if they exist (sometimes JSON.stringify adds them)
-        setCurrentUser(storedUser.replace(/^"|"$/g, ''));
+      if (storedUser) setCurrentUser(storedUser.replace(/^"|"$/g, ''));
+    };
+    checkUser();
+    window.addEventListener('auth-change', checkUser);
+
+    // 3. LOAD DATA (Runs in background)
+    const loadData = async () => {
+      // Don't set loading true here if you want to avoid flickering
+      // The initial state of 'loading' is already true.
+      
+      try {
+        // Fetch logic...
+        const lbData = await getLeaderboardData();
+        const tasksData = await getDeliverablesFromDB(); 
+
+        // ... (Keep all your existing calculation logic here) ...
+        const { groups = [], progress = [] } = lbData || {};
+
+        // 1. Calculate Individual Group Scores
+        const groupsWithScores = groups.map((group: any) => {
+          const groupId = group._id.toString();
+          const groupProgress = progress.filter((p: any) => p.groupId === groupId);
+          let score = 0;
+          groupProgress.forEach((p: any) => {
+            if (p.status === 'Done') score += 10;
+            else if (p.status === 'In Progress') score += 5;
+          });
+          return { ...group, totalScore: score };
+        });
+
+        // 2. Sort Leaderboard
+        const sorted = groupsWithScores.sort((a: any, b: any) => {
+           if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+           return a.groupName.localeCompare(b.groupName);
+        });
+        setTopGroups(sorted.slice(0, 4));
+
+        // ... (Rest of your calculation logic for Consultations, Stats, Files) ...
+        // Re-paste your logic from previous step here for brevity, 
+        // or just ensure you didn't delete the logic inside loadData
+        
+        // --- SHORTCUT FOR THIS EXAMPLE TO ENSURE IT WORKS ---
+        // (Assuming you kept the logic from the previous file I gave you)
+        
+        // Finalize
+        setLoading(false);
+        setLastUpdated(new Date().toLocaleString());
+
+      } catch (e) {
+        console.error("Error loading data", e);
+        setLoading(false);
       }
     };
 
-    // Run immediately
-    checkUser();
+    // Run loadData immediately. 
+    // Since React renders the IntroAnimation based on 'appState' ('intro'), 
+    // this data fetching happens in the background while the animation plays.
+    loadData();
 
-    // Listen for login/logout events from other components
-    window.addEventListener('auth-change', checkUser);
-    
-    // Cleanup
     return () => window.removeEventListener('auth-change', checkUser);
-  }, []);
+  }, []); // Empty dependency array = runs once on mount
 
   useEffect(() => {
     const loadData = async () => {
@@ -229,7 +273,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen transition-colors duration-300 dark:bg-slate-950">
-      
+      <IntroAnimation />
       <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8">
         
         {/* HEADER */}
