@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldAlert, ArrowRight, AlertTriangle, Clock } from 'lucide-react';
-import { recordAuditLog, setAuthCookie } from "@/app/actions"; // <--- Add setAuthCookie
+import { recordAuditLog, setAuthCookie } from "../actions"; // <--- Add setAuthCookie
 
 // Move VAULT_KEYS outside the component to avoid re-creation on every render
 const VAULT_KEYS: Record<string, string> = {
@@ -10,11 +10,13 @@ const VAULT_KEYS: Record<string, string> = {
   "abra": "ABRA",                  
   "agile123": "Agile Team",
   "swinescan": "Swine Scan Team",
-  "mockdefense": "Panelist"
-};
+  "mockdefense": "Panelist",
+  "alpha": "Alpha",
+  "wilem": "Wilem"
+}; 
 
 const MAX_ATTEMPTS = 5;
-const LOCKOUT_DURATION = 0.1 * 60 * 1000; // 15 Minutes
+const LOCKOUT_DURATION = 0.5 * 60 * 1000; // 15 Minutes
 
 export default function LoginPage() {
   const router = useRouter();
