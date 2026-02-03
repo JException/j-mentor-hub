@@ -23,7 +23,8 @@ const VAULT_KEYS: Record<string, string> = {
   "mockdefense": "Panelist",
   "alpha": "Alpha",
   "wilem": "Wilem",
-  "cyra": "Cyra"
+  "cyra": "Cyra",
+  "akira": "Akira",
 }; 
 
 const MAX_ATTEMPTS = 5;
@@ -184,7 +185,7 @@ export default function LoginPage() {
           {introStage === 0 && (
             <div className="animate-pulse flex flex-col items-center">
               <Lock className="w-16 h-16 text-slate-500 mb-4" />
-              <h2 className="text-slate-400 font-mono text-xl tracking-widest">ENCRYPTING CONNECTION...</h2>
+              <h2 className="text-slate-400 font-mono text-xl tracking-widest">Pre-loading interface components...</h2>
             </div>
           )}
 
@@ -192,7 +193,7 @@ export default function LoginPage() {
           {introStage === 1 && (
             <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300">
               <Fingerprint className="w-16 h-16 text-blue-500 mb-4 animate-bounce" />
-              <h2 className="text-blue-400 font-mono text-xl tracking-widest">VERIFYING CREDENTIALS...</h2>
+              <h2 className="text-blue-400 font-mono text-xl tracking-widest">Verifying SSL certificates...</h2>
               <div className="w-48 h-1 bg-slate-800 rounded mt-4 overflow-hidden">
                 <div className="h-full bg-blue-500 animate-[loading_1s_ease-in-out_infinite]" style={{ width: '60%' }} />
               </div>
@@ -201,13 +202,13 @@ export default function LoginPage() {
 
           {/* STAGE 2: ACCESS GRANTED */}
           {introStage === 2 && (
-            <div className="flex flex-col items-center animate-in zoom-in-50 duration-300">
+            <div className="flex flex-col items-center animate-in zoom-in-100 duration-5000">
               <div className="relative">
                 <div className="absolute inset-0 bg-green-500 blur-xl opacity-20 animate-pulse" />
                 <ShieldCheck className="relative w-20 h-20 text-green-400 mb-4" />
               </div>
-              <h2 className="text-green-400 font-black text-2xl tracking-[0.2em] animate-pulse">ACCESS GRANTED</h2>
-              <p className="text-slate-500 font-mono text-sm mt-2">Welcome, Panelist.</p>
+              <h2 className="text-green-400 font-black text-2xl tracking-[0.2em] animate-pulse">Authorized!</h2>
+              <p className="text-slate-500 font-mono text-sm mt-2">Welcome to Thesis Mentoring Hub 4.0</p>
             </div>
           )}
         </div>
