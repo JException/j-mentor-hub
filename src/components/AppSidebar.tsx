@@ -11,7 +11,8 @@ import {
   Box, 
   ChevronLeft,
   ChevronRight,
-  User 
+  User,
+  ScanSearch // <--- 1. IMPORT THIS ICON
 } from "lucide-react";
 
 export default function AppSidebar() {
@@ -23,7 +24,6 @@ export default function AppSidebar() {
   // ✅ 1. useEffect to sync User State
   useEffect(() => {
     const checkUser = () => {
-      // Get the user from the standardized key
       const storedUser = localStorage.getItem('audit_user');
       if (storedUser) {
         setCurrentUser(storedUser);
@@ -32,30 +32,19 @@ export default function AppSidebar() {
       }
     };
 
-    // Run on mount
     checkUser();
-
-    // Listen for login/logout events to update immediately
     window.addEventListener('auth-change', checkUser);
-
-    // Cleanup listener
     return () => window.removeEventListener('auth-change', checkUser);
-    
   }, [pathname]); 
 
   // ✅ 2. Hide Sidebar on Login Page
   if (pathname === '/login') return null;
 
   const handleSignOut = () => {
-    // 1. Clear Client Storage
     localStorage.removeItem('audit_auth');
     localStorage.removeItem('audit_user');
     localStorage.removeItem('currentUser'); 
-    
-    // 2. Clear Server Cookie (CRITICAL FIX)
     document.cookie = "audit_user=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    
-    // 3. Update UI and Redirect
     window.dispatchEvent(new Event('auth-change'));
     router.push("/login");
   };
@@ -85,6 +74,15 @@ export default function AppSidebar() {
         
         <SidebarItem collapsed={isCollapsed} icon={<LayoutDashboard size={20} />} label="Dashboard" href="/" active={pathname === "/"} />
         <SidebarItem collapsed={isCollapsed} icon={<Presentation size={20} />} label="Mock Defense" href="/mock-defense" active={pathname === "/mock-defense"} />
+        
+        {/* ⭐ NEW MODULE ADDED HERE ⭐ */}
+        <SidebarItem 
+            collapsed={isCollapsed} 
+            icon={<ScanSearch size={20} />} 
+            label="Thesis Scanner" 
+            href="scanner" 
+            active={pathname === "scanner" } 
+        />
         
         <div className="pt-4 pb-2">
           <div className="h-px bg-slate-800 mx-4" />

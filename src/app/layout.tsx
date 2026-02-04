@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import AppSidebar from "@/components/AppSidebar"; 
-// 👇 CHANGED: Added curly braces { }
-import { SysAdminButton } from "@/components/SysAdminButton"; 
+import AppSidebar from "./../components/AppSidebar";
+import { SysAdminButton } from "./../components/SysAdminButton";
 
 const inter = Inter({ subsets: ["latin"] });
 
