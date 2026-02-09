@@ -1,6 +1,6 @@
 import mongoose, { Schema, model, models } from 'mongoose';
 
-// 1. Define the File Schema
+// 1. File Schema (Keep as is)
 const FileSchema = new Schema({
   fileId: { type: String, required: true },
   name: { type: String, required: true },
@@ -9,64 +9,67 @@ const FileSchema = new Schema({
   uploadDate: { type: Date, default: Date.now }
 });
 
-// 2. Update Group Schema
+// 2. Evaluation Schema (For the Panel Cockpit Scores)
+const EvaluationSchema = new Schema({
+  panelistId: String, // Or name if no auth system yet
+  presentationScore: { type: Number, default: 0 },
+  manuscriptScore: { type: Number, default: 0 },
+  systemScore: { type: Number, default: 0 },
+  totalScore: { type: Number, default: 0 },
+  comments: [{
+    type: { type: String, enum: ['major', 'minor', 'question'] },
+    text: String,
+    timestamp: { type: Date, default: Date.now }
+  }],
+  isFinalized: { type: Boolean, default: false }
+});
+
+// 3. MAIN GROUP SCHEMA
 const GroupSchema = new Schema({
-  groupName: { 
-    type: String, 
-    required: [true, "Group name is required"] 
-  },
-  thesisTitle: { 
-    type: String, 
-    default: "" 
-  },
-  members: { 
-    type: [String], 
-    default: [] 
-  },
-  projectManager: {
-    type: String,
-    default: ""
-  },
+
+  groupName: { type: String, required: true },
+  thesisTitle: { type: String, default: "" },
+  members: { type: [String], default: [] },
+  sections: { type: [String], default: [] }, 
+
+  projectManager: { type: String, default: "" },
   
-  // --- MISSING FIELDS ADDED BELOW ---
-
-  // Sections (e.g., ["TN31", "TN32"])
-  sections: {
-    type: [String],
-    default: []
-  },
-
-  // Advisers (SE II and PM Professors)
+  // Mentoring Advisers
   advisers: {
     seAdviser: { type: String, default: "" },
     pmAdviser: { type: String, default: "" }
   },
 
-  // Consultation Schedule
-  consultationSchedule: {
-    day: { type: String, default: "" },
-    time: { type: String, default: "" }
-  },
-
-  // ----------------------------------
-
-  files: { 
-    type: [FileSchema], 
-    default: [] 
-  },
-
-  mockDefenseDate: { type: Date },
-  mockDefenseMode: { type: String, enum: ['F2F', 'Online'] },
-  mockDefenseGrades: [
-    {
-      panelistName: String,
-      presentationScore: Number,
-      paperScore: Number, 
-      comment: String,
-      timestamp: { type: Date, default: Date.now }
-    }
-  ]
+  consultationDay: { type: String, default: "" },
+  consultationTime: { type: String, default: "" },
+  schedules: { type: Map, of: Object, default: {} },
   
+  // 🟢 UPDATED: Specific Roles for Panelists
+  panelists: { 
+    chair: { type: String, default: "" },
+    internal: { type: String, default: "" },
+    external: { type: String, default: "" }
+  },
+
+  defense: { // Mock Defense
+    date: { type: String, default: "" }, 
+    time: { type: String, default: "" }, 
+    room: { type: String, default: "" },
+    status: { 
+      type: String, 
+      enum: ['Pending', 'Evaluated', 'Missed'], 
+      default: 'Pending' 
+    },
+    evaluations: [EvaluationSchema] 
+  },
+
+  finalDefense: { // Final defense details
+    date: { type: String, default: "" }, 
+    time: { type: String, default: "" },
+  },
+
+  files: { type: [FileSchema], default: [] },
+
 }, { timestamps: true });
 
 const Group = models.Group || model('Group', GroupSchema);

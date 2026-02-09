@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import mammoth from 'mammoth';
 
 // 1. GLOBAL FIXES (TypeScript Safe)
-// We cast global to 'any' immediately to avoid "Property does not exist" or "Implicit any" errors
 if (!(global as any).DOMMatrix) {
   // @ts-ignore
   (global as any).DOMMatrix = class {};
@@ -60,48 +59,33 @@ export async function POST(req: Request) {
     const file = formData.get('file') as File;
 
     if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-
     const buffer = Buffer.from(await file.arrayBuffer());
     
     let pages: string[] = [];
     let fullText = '';
 
-    // 3. EXTRACT TEXT WITH PAGE TRACKING
-    try {
-      if (file.type === 'application/pdf') {
-        // Custom render to separate pages
+    // 3. EXTRACT TEXT
+    if (file.type === 'application/pdf') {
         const options = {
             pagerender: function(pageData: any) {
-                return pageData.getTextContent()
-                .then(function(textContent: any) {
+                return pageData.getTextContent().then(function(textContent: any) {
                     let lastY, text = '';
                     for (let item of textContent.items) {
-                        if (lastY == item.transform[5] || !lastY){
-                            text += item.str;
-                        } else {
-                            text += '\n' + item.str; // Preserve line breaks
-                        }
+                        if (lastY == item.transform[5] || !lastY) text += item.str;
+                        else text += '\n' + item.str;
                         lastY = item.transform[5];
                     }
-                    return text + "#####PAGE_SPLIT#####"; // Inject custom delimiter
+                    return text + "#####PAGE_SPLIT#####";
                 });
             }
         };
         const data = await pdf(buffer, options);
-        // Split by our custom delimiter to get array of pages
         pages = data.text.split("#####PAGE_SPLIT#####");
-        fullText = data.text.replace(/#####PAGE_SPLIT#####/g, " "); // Clean full text for structure check
-      } 
-      else if (file.name.endsWith('.docx')) {
+        fullText = data.text.replace(/#####PAGE_SPLIT#####/g, " ");
+    } else if (file.name.endsWith('.docx')) {
         const result = await mammoth.extractRawText({ buffer });
         fullText = result.value;
-        pages = [fullText]; // DOCX usually comes as one big block, hard to paginate
-      } else {
-        return NextResponse.json({ error: "Invalid file type. Use PDF or DOCX" }, { status: 400 });
-      }
-    } catch (parseError: any) {
-      console.error("Parsing Error:", parseError);
-      return NextResponse.json({ error: "Could not read text." }, { status: 500 });
+        pages = [fullText];
     }
 
     const lowerFullText = fullText.toLowerCase();
@@ -110,220 +94,126 @@ export async function POST(req: Request) {
     const found: string[] = [];
     const missing: string[] = [];
     REQUIRED_SECTIONS.forEach((section) => {
-      const exists = section.keywords.some((k) => lowerFullText.includes(k));
-      if (exists) found.push(section.label);
+      if (section.keywords.some((k) => lowerFullText.includes(k))) found.push(section.label);
       else missing.push(section.label);
     });
     const structureScore = Math.round((found.length / REQUIRED_SECTIONS.length) * 100);
 
-    // --- 5. TONE POLICE (With Page/Line Location) ---
-    // We scan page by page to find location
-    const styleIssues: { word: string, type: string, locations: string[] }[] = [];
-    
+    // --- 5. TONE POLICE ---
+    const styleIssues: any[] = [];
     BAD_HABITS.forEach(habit => {
         habit.words.forEach(word => {
             const locations: string[] = [];
-            
-            pages.forEach((pageText, pageIndex) => {
-                const lines = pageText.split('\n');
-                lines.forEach((line, lineIndex) => {
-                    if (line.toLowerCase().includes(word)) {
-                        // Limit to 5 occurrences per word to prevent flooding
-                        if(locations.length < 5) {
-                            locations.push(`Page ${pageIndex + 1}, Line ${lineIndex + 1}`);
-                        }
-                    }
-                });
+            pages.forEach((pageText, pIdx) => {
+                if (pageText.toLowerCase().includes(word) && locations.length < 5) {
+                    locations.push(`Page ${pIdx + 1}`);
+                }
             });
-
-            if (locations.length > 0) {
-                styleIssues.push({ 
-                    word: word.trim(), 
-                    type: habit.type, 
-                    locations 
-                });
-            }
+            if (locations.length > 0) styleIssues.push({ word: word.trim(), type: habit.type, locations });
         });
     });
 
-    // --- 6. CITATION DETECTIVE (With Page Location) ---
+    // --- 6. CITATION DETECTIVE ---
     const citationRegex = /\(([A-Za-z\s&]+),\s?\d{4}\)/g;
-    
-    // Find where citations appear in the text
-    const foundCitations: { name: string, full: string, locations: string[] }[] = [];
-    
-    // First, gather all citations
     const uniqueCitationsMap = new Map<string, { full: string, locations: string[] }>();
-
     pages.forEach((pageText, pageIndex) => {
-         const lines = pageText.split('\n');
-         lines.forEach((line, lineIndex) => {
-             let match;
-             // Reset regex state for each line
-             const regex = new RegExp(citationRegex); 
-             while ((match = regex.exec(line)) !== null) {
-                 const fullCitation = match[0]; // (Smith, 2020)
-                 const authorName = match[1].split(',')[0].trim(); // Smith
-                 
-                 const location = `Page ${pageIndex + 1}, Line ${lineIndex + 1}`;
-                 
-                 if (!uniqueCitationsMap.has(authorName)) {
-                     uniqueCitationsMap.set(authorName, { full: fullCitation, locations: [location] });
-                 } else {
-                     const entry = uniqueCitationsMap.get(authorName);
-                     if (entry && entry.locations.length < 3) {
-                         entry.locations.push(location);
-                     }
-                 }
-             }
-         });
+        let match;
+        const regex = new RegExp(citationRegex); 
+        while ((match = regex.exec(pageText)) !== null) {
+            const authorName = match[1].split(',')[0].trim();
+            if (!uniqueCitationsMap.has(authorName)) {
+                uniqueCitationsMap.set(authorName, { full: match[0], locations: [`Page ${pageIndex + 1}`] });
+            }
+        }
     });
 
-    // Extract Reference Section
     const refIndex = Math.max(lowerFullText.lastIndexOf('references'), lowerFullText.lastIndexOf('bibliography'));
     const referenceSection = refIndex !== -1 ? lowerFullText.slice(refIndex) : "";
-
-    // Check which ones are missing
-    const missingCitations: { text: string, locations: string[] }[] = [];
-
+    const missingCitations: any[] = [];
     uniqueCitationsMap.forEach((value, key) => {
-        // loose check: is the author name in the reference section?
         if (!referenceSection.includes(key.toLowerCase())) {
-            missingCitations.push({
-                text: value.full,
-                locations: value.locations
-            });
+            missingCitations.push({ text: value.full, locations: value.locations });
         }
     });
 
- // ... existing code ...
+    // --- 7. REFERENCE RECENCY (New) ---
+    const yearRegex = /\b(19|20)\d{2}\b/g;
+    const yearsFound = referenceSection.match(yearRegex)?.map(Number) || [];
+    const currentYear = 2026;
+    const last5Years = yearsFound.filter(y => y >= currentYear - 5 && y <= currentYear).length;
+    const percentageRecent = yearsFound.length > 0 ? Math.round((last5Years / yearsFound.length) * 100) : 0;
 
-   // --- 7. READABILITY ANALYSIS (Flesch-Kincaid) ---
+    // --- 8. READABILITY ---
     const totalSentences = fullText.split(/[.!?]+/).length || 1;
     const totalWords = fullText.split(/\s+/).length || 1;
-    
-    // approximate syllable count
-    const countSyllables = (word: string) => {
-        word = word.toLowerCase();
-        if(word.length <= 3) return 1;
-        word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '');
-        word = word.replace(/^y/, '');
-        return word.match(/[aeiouy]{1,2}/g)?.length || 1;
-    };
-    
-    const totalSyllables = fullText.split(/\s+/).reduce((acc, word) => acc + countSyllables(word), 0);
-    
-    const wordsPerSentence = totalWords / totalSentences;
-    const syllablesPerWord = totalSyllables / totalWords;
-    
-    // Flesch-Kincaid Grade Level
-    let gradeLevel = (0.39 * wordsPerSentence) + (11.8 * syllablesPerWord) - 15.59;
-    gradeLevel = Math.max(0, Math.min(25, gradeLevel)); 
+    const gradeLevel = Math.max(0, Math.min(25, (0.39 * (totalWords / totalSentences)) + 10));
 
-    // ... existing code (Readability etc.) ...
-
-    // --- 8. ACRONYM AUDITOR ---
-    // Find all words with 3+ Uppercase letters (e.g., "SaaS", "IOT")
+    // --- 9. ACRONYMS & FIGURES ---
     const acronymMatches = fullText.match(/\b[A-Z]{3,}\b/g) || [];
-    const uniqueAcronyms = [...new Set(acronymMatches)];
-    
-    // Find definitions: look for pattern " (ACRONYM)"
-    // This implies the definition preceded it: "Software as a Service (SaaS)"
-    const definedAcronyms = new Set<string>();
-    const definitionRegex = /\(([A-Z]{3,})\)/g;
-    let defMatch;
-    while ((defMatch = definitionRegex.exec(fullText)) !== null) {
-        definedAcronyms.add(defMatch[1]);
-    }
+    const definedAcronyms = Array.from(new Set(fullText.match(/\(([A-Z]{3,})\)/g)?.map(m => m.replace(/[()]/g, "")) || []));
+    const undefinedAcronyms = [...new Set(acronymMatches)].filter(a => !definedAcronyms.includes(a)).slice(0, 10);
 
-    // Identify undefined ones
-    // We filter out common words like "THE" or "AND" just in case, though 3+ letters helps
-    const commonIgnored = ['THE', 'AND', 'FOR', 'NOT', 'BUT', 'CAN', 'ANY', 'ALL'];
-    const undefinedAcronyms = uniqueAcronyms.filter(acr => 
-        !definedAcronyms.has(acr) && !commonIgnored.includes(acr)
-    ).slice(0, 10); // Top 10 only to save space
+    const figuresFound = (fullText.match(/^(Figure|Fig\.|Table)\s+(\d+)/gim) || []).length;
 
-    // --- 9. FIGURE & TABLE CHECKER ---
-    // Heuristic: Captions usually start a line. Mentions are inside sentences.
-    const figuresFound = new Set<string>();
-    const figuresMentioned = new Set<string>();
-    
-    pages.forEach(page => {
-        const lines = page.split('\n');
-        lines.forEach(line => {
-            const trimLine = line.trim();
-            
-            // Detect Captions (Start of line)
-            // Matches: "Figure 1", "Fig. 1", "Table 1"
-            const captionMatch = trimLine.match(/^(Figure|Fig\.|Table)\s+(\d+)/i);
-            if (captionMatch) {
-                // Normalize key: "figure-1", "table-2"
-                const type = captionMatch[1].toLowerCase().startsWith('t') ? 'table' : 'figure';
-                figuresFound.add(`${type}-${captionMatch[2]}`);
-            }
+    // --- 10. PANEL READINESS SCORE (New) ---
+    const readinessFactors = [
+        {
+            label: "Structure",
+            score: structureScore,
+            status: structureScore > 85 ? 'pass' : 'warning',
+            message: structureScore > 85 ? "Required sections detected." : "Missing critical chapters."
+        },
+        {
+            label: "Citations",
+            score: missingCitations.length === 0 ? 100 : 50,
+            status: missingCitations.length === 0 ? 'pass' : 'fail',
+            message: missingCitations.length === 0 ? "All sources documented." : "Unsynced citations found."
+        },
+        {
+            label: "Recency",
+            score: percentageRecent,
+            status: percentageRecent > 60 ? 'pass' : 'warning',
+            message: percentageRecent > 60 ? "Literature is current." : "Old sources detected."
+        }
+    ];
+    const overallReadiness = Math.round(readinessFactors.reduce((acc, f) => acc + f.score, 0) / 3);
 
-            // Detect Mentions (Anywhere in text)
-            // Matches: "in Figure 1", "see Table 2"
-            const mentionRegex = /(?:in|see|refer to|shown in)\s+(Figure|Fig\.|Table)\s+(\d+)/gi;
-            let mention;
-            while ((mention = mentionRegex.exec(line)) !== null) {
-                const type = mention[1].toLowerCase().startsWith('t') ? 'table' : 'figure';
-                figuresMentioned.add(`${type}-${mention[2]}`);
-            }
-        });
-    });
-
-    // Find Orphans (Mentioned but no Caption found)
-    const orphans: string[] = [];
-    figuresMentioned.forEach(ref => {
-        if (!figuresFound.has(ref)) {
-            // Convert "figure-1" back to "Figure 1" for display
-            const [type, num] = ref.split('-');
-            orphans.push(`${type.charAt(0).toUpperCase() + type.slice(1)} ${num}`);
+    // --- FINAL CONSOLIDATED RETURN ---
+    return NextResponse.json({
+        fileName: file.name,
+        wordCount: totalWords,
+        score: structureScore,
+        found,
+        missing,
+        styleIssues,
+        readability: {
+            gradeLevel: Math.round(gradeLevel * 10) / 10,
+            stats: { sentences: totalSentences, words: totalWords }
+        },
+        citationAnalysis: {
+            totalCitations: uniqueCitationsMap.size,
+            missingRefs: missingCitations
+        },
+        acronyms: {
+            defined: definedAcronyms,
+            undefined: undefinedAcronyms
+        },
+        figures: {
+            count: figuresFound,
+            orphans: [] 
+        },
+        referenceRecency: {
+            total: yearsFound.length,
+            last5Years,
+            older: yearsFound.length - last5Years,
+            percentageRecent,
+            yearsFound: yearsFound.slice(0, 20) // Send sample
+        },
+        readinessScore: {
+            overall: overallReadiness,
+            factors: readinessFactors
         }
     });
-
-    // Add these 2 new objects to your return JSON:
-    return NextResponse.json({
-      // ... existing fields ...
-      acronyms: {
-        defined: Array.from(definedAcronyms),
-        undefined: undefinedAcronyms
-      },
-      figures: {
-        count: figuresFound.size,
-        orphans: orphans
-      },
-      // ... existing fields ...
-      score: structureScore, 
-      readability: { // ... existing readability ... 
-          gradeLevel: Math.round(gradeLevel * 10) / 10,
-          stats: { sentences: totalSentences, words: totalWords }
-      },
-      found, missing, styleIssues, citationAnalysis: { totalCitations: uniqueCitationsMap.size, missingRefs: missingCitations }, wordCount: totalWords, fileName: file.name
-    });
-
-    return NextResponse.json({
-      score: structureScore,
-      readability: {
-          gradeLevel: Math.round(gradeLevel * 10) / 10, // Round to 1 decimal
-          stats: {
-             sentences: totalSentences,
-             words: totalWords,
-             complexWords: 0 // placeholder if you want to expand later
-          }
-      },
-      found,
-      missing,
-      styleIssues, 
-      citationAnalysis: {
-        totalCitations: uniqueCitationsMap.size,
-        missingRefs: missingCitations 
-      },
-      wordCount: totalWords,
-      fileName: file.name
-    });
-// ...
 
   } catch (error: any) {
     console.error("API Error:", error);

@@ -4,6 +4,8 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation"; 
 import { 
+  Gavel,
+  ScanLine,
   LayoutDashboard, 
   Presentation, 
   Settings, 
@@ -12,7 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
-  ScanSearch // <--- 1. IMPORT THIS ICON
+  ScanSearch,
 } from "lucide-react";
 
 export default function AppSidebar() {
@@ -63,7 +65,7 @@ export default function AppSidebar() {
         {!isCollapsed && (
           <div className="overflow-hidden whitespace-nowrap">
             <h1 className="font-black text-lg tracking-tight">JJCP THESIS</h1>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">MENTORING HUB v4.0</p>
+            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">MENTORING HUB v5.0</p>
           </div>
         )}
       </div>
@@ -72,16 +74,40 @@ export default function AppSidebar() {
       <nav className="flex-1 px-4 py-6 space-y-2">
         {!isCollapsed && <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Main Menu</p>}
         
-        <SidebarItem collapsed={isCollapsed} icon={<LayoutDashboard size={20} />} label="Dashboard" href="/" active={pathname === "/"} />
-        <SidebarItem collapsed={isCollapsed} icon={<Presentation size={20} />} label="Mock Defense" href="/mock-defense" active={pathname === "/mock-defense"} />
+        {/* 1. DASHBOARD */}
+        <SidebarItem 
+            collapsed={isCollapsed} 
+            icon={<LayoutDashboard size={20} />} 
+            label="Dashboard" 
+            href="/" 
+            active={pathname === "/"} 
+        />
         
-        {/* ⭐ NEW MODULE ADDED HERE ⭐ */}
+        {/* 2. MOCK DEFENSE (Your Mentoring) */}
+        <SidebarItem 
+            collapsed={isCollapsed} 
+            icon={<Presentation size={20} />} 
+            label="Mock Defense" 
+            href="/mock-defense" 
+            active={pathname === "/mock-defense"} 
+        />
+
+        {/* 3. ⭐ NEW: PANEL BOARD (Your Judging) ⭐ */}
+        <SidebarItem 
+            collapsed={isCollapsed} 
+            icon={<Gavel size={20} />} // Gavel icon perfect for judging
+            label="Panel Board" 
+            href="/panel-board" 
+            active={pathname === "/panel-board"} 
+        />
+        
+        {/* 4. THESIS SCANNER */}
         <SidebarItem 
             collapsed={isCollapsed} 
             icon={<ScanSearch size={20} />} 
             label="Thesis Scanner" 
-            href="scanner" 
-            active={pathname === "scanner" } 
+            href="/scanner" // Added leading slash for safety
+            active={pathname === "/scanner" } 
         />
         
         <div className="pt-4 pb-2">

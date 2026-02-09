@@ -4,7 +4,7 @@ import {
   Database, Calendar, Users, 
   CloudUpload, Loader2, ArrowLeft,
   ChevronRight, Clock, ShieldAlert,
-  Star, Sparkles, CheckCircle2 // Added icons
+  Star, Sparkles, CheckCircle2 
 } from 'lucide-react';
 
 import { 
@@ -18,17 +18,23 @@ const DAY_LABELS: Record<string, string> = {
   'M': 'Mon', 'T': 'Tue', 'W': 'Wed', 'H': 'Thu', 'F': 'Fri', 'S': 'Sat' 
 };
 
-// Helper to map Full Day Name (DB) -> Code (Heatmap)
 const DAY_TO_CODE: Record<string, string> = {
   'Monday': 'M', 'Tuesday': 'T', 'Wednesday': 'W', 'Thursday': 'H', 'Friday': 'F', 'Saturday': 'S'
 };
 
-// Helper to sort days
 const DAY_ORDER: Record<string, number> = {
   'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6, 'Sunday': 7
 };
 
-const sanitizeKey = (key: string) => key.replace(/\./g, ' ').trim();
+// --- STRICT SANITIZER ---
+const sanitizeKey = (key: string) => {
+  if (!key) return "";
+  return key
+    .toLowerCase()         // Force lowercase
+    .replace(/\./g, ' ')   // Replace dots with spaces
+    .replace(/\s+/g, ' ')  // Collapse multiple spaces into one
+    .trim();               // Remove leading/trailing whitespace
+};
 
 const TIME_SLOTS = Array.from({ length: 28 }, (_, i) => {
   const hour = Math.floor(i / 2) + 7; 
@@ -41,6 +47,7 @@ interface ScheduleItem {
   start: number;
   end: number;
   title: string;
+  venue: string;
 }
 
 interface Member {
@@ -51,26 +58,21 @@ interface Member {
 }
 
 export default function ScheduleManager() {
-  // State
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'dashboard' | 'editor'>('dashboard');
   
-  // Editor State
   const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [selectedGroupId, setSelectedGroupId] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
 
-  // --- HELPER: TIME PARSER ---
   const parseTimeValue = (timeStr: string) => {
     if (!timeStr) return 9999; 
     const [time, modifier] = timeStr.split(' ');
     let [hours, minutes] = time.split(':').map(Number);
-    
     if (modifier === 'PM' && hours !== 12) hours += 12;
     if (modifier === 'AM' && hours === 12) hours = 0;
-    
     return hours * 60 + minutes;
   };
 
@@ -80,7 +82,6 @@ export default function ScheduleManager() {
     return h * 60 + m;
   };
 
-  // Convert 24h string back to 12h for display
   const minToDisplay = (minutes: number) => {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
@@ -89,7 +90,6 @@ export default function ScheduleManager() {
     return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
   };
 
-  // --- HELPER: CONVERT 12H (DB) to 24H (Heatmap) ---
   const convertDBTimeToHeatmap = (timeStr: string) => {
     if (!timeStr) return null;
     try {
@@ -103,11 +103,11 @@ export default function ScheduleManager() {
     }
   };
 
-  // --- INITIAL DATA LOAD & SORT ---
   const loadGroups = async () => {
     setLoading(true);
     try {
       const data = await getGroupsFromDB();
+      // console.log("🕵️ [SPY] Raw DB Groups:", data); // Uncomment if groups aren't loading at all
       const sortedData = data.sort((a: any, b: any) => {
         const dayA = DAY_ORDER[a.consultationDay] || 99;
         const dayB = DAY_ORDER[b.consultationDay] || 99;
@@ -126,7 +126,14 @@ export default function ScheduleManager() {
 
   useEffect(() => { loadGroups(); }, []);
 
-  // --- HANDLERS ---
+  // --- UPGRADED MATCHING LOGIC ---
+  const normalizeForMatch = (str: string) => {
+    if (!str) return "";
+    // Removes EVERYTHING except letters and numbers.
+    // "Fitz Troy R. Tobias" -> "fitztroyrtobias"
+    return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+  };
+
   const enterGroupEditor = (groupId: string) => {
     setSelectedGroupId(groupId);
     if (groupId === "manual") {
@@ -139,17 +146,43 @@ export default function ScheduleManager() {
     } else {
       const group = groups.find(g => g._id === groupId);
       if (!group) return;
+
+      console.group("🕵️ [SPY] Smart Loading Group: " + group.groupName);
+
+      // 1. Create a "Smart Map" of the database data
+      // We store the data under a simplified "normalized" key
+      const smartDbMap: Record<string, any> = {};
+      
+      if (group.schedules) {
+        Object.keys(group.schedules).forEach(dbKey => {
+          const simplifiedKey = normalizeForMatch(dbKey);
+          smartDbMap[simplifiedKey] = group.schedules[dbKey];
+          console.log(`  DB Key: "${dbKey}" -> Normalized: "${simplifiedKey}"`);
+        });
+      } else {
+        console.warn("  ⚠️ No 'schedules' object found on this group in DB.");
+      }
+
+      // 2. Map Members using the Smart Map
       const groupMembers = group.members
-        .filter((name: string) => name.trim() !== "")
+        .filter((name: string) => name && name.trim() !== "")
         .map((name: string, i: number) => {
-          const safeName = sanitizeKey(name);
+          
+          const simplifiedName = normalizeForMatch(name);
+          const savedData = smartDbMap[simplifiedName];
+
+          console.log(`  Matching Member: "${name}" -> Normalized: "${simplifiedName}" -> Found? ${!!savedData ? "✅ YES" : "❌ NO"}`);
+
           return {
             id: i + 1,
             name: name,
-            raw: group.schedules?.[safeName]?.raw || "",
-            parsed: group.schedules?.[safeName]?.parsed || []
+            // If found, use saved data. If not, empty.
+            raw: savedData?.raw || "",
+            parsed: savedData?.parsed || []
           };
         });
+
+      console.groupEnd();
       setMembers(groupMembers);
     }
     setActiveTabIndex(0);
@@ -164,47 +197,81 @@ export default function ScheduleManager() {
   const handleParse = (index: number, text: string) => {
     const lines = text.trim().split('\n');
     const schedule: ScheduleItem[] = [];
+    
     lines.forEach(line => {
+      // Split by tab or 2+ spaces
       const parts = line.split(/\t| {2,}/).map(p => p.trim());
+      
+      // Ensure we have enough columns (Day is usually index 4, Time is 5, Room is 6)
       if (parts.length >= 6 && parts[0] !== "Courses") {
+        
+        // Split strings by " / " in case of multiple schedules (e.g. M / H)
         const dayArr = parts[4].split(' / ');
         const timeArr = parts[5].split(' / ');
+        
+        // 👈 GRAB THE VENUE (Index 6)
+        // If it doesn't exist, default to empty string
+        const venueArr = (parts[6] || "").split(' / ');
+
         dayArr.forEach((dayRaw, i) => { 
           let day = dayRaw.trim();
           if (day === "TH" || day === "Th") day = "H"; 
-          const timeRange = timeArr[i] || timeArr[0];
+          
+          const timeRange = timeArr[i] || timeArr[0]; // Use matching time or fallback to first
+          const venue = venueArr[i] || venueArr[0] || "TBA"; // 👈 Use matching venue or fallback
+          
           const [start, end] = timeRange.split('-');
+          
           if (start && end) {
             schedule.push({ 
               day: day, 
               start: timeToMin(start), 
               end: timeToMin(end), 
-              title: parts[1] 
+              title: parts[1],
+              venue: venue // 👈 Save it here
             });
           }
         });
       }
     });
+
     const updated = [...members];
     updated[index].raw = text;
     updated[index].parsed = schedule;
     setMembers(updated);
   };
-
   const handleSaveSchedules = async () => {
     if (selectedGroupId === "manual") return;
     setIsSaving(true);
     try {
       const scheduleData: Record<string, any> = {};
+      
+      // 🕵️ SPY SECTION: SAVING
+      console.group("🕵️ [SPY] Saving Data");
+      
       members.forEach(m => {
         const safeKey = sanitizeKey(m.name);
         scheduleData[safeKey] = { raw: m.raw, parsed: m.parsed };
+        console.log(`  Packing: "${m.name}" -> Key: "${safeKey}"`);
       });
+      
+      console.log("Payload sending to server:", scheduleData);
+      console.groupEnd();
+      // 🕵️ END SPY SECTION
+
       const result = await updateGroupSchedule(selectedGroupId, scheduleData);
+      
+      console.log("🕵️ [SPY] Server Response:", result);
+
       if (result.success) {
-        alert("Schedules synced with MongoDB!");
         await loadGroups();
+        alert("Schedules synced with MongoDB!");
+      } else {
+        alert("Error saving: " + (result.error || "Unknown"));
       }
+    } catch (error) {
+      console.error("Save failed:", error);
+      alert("Failed to sync with Database.");
     } finally {
       setIsSaving(false);
     }
@@ -217,70 +284,46 @@ export default function ScheduleManager() {
     );
   };
 
-  // --- LOGIC: FIND ALTERNATE SLOTS ---
   const alternateSlots = useMemo(() => {
     if (viewMode !== 'editor') return {};
 
     const options: Record<string, string[]> = {};
     const otherGroups = groups.filter(g => g._id !== selectedGroupId);
 
-  // 1. Is User Busy? (Personal Constraints)
     const isUserBusy = (day: string, timeVal: number) => {
-      // Constraint 1: Whole Tuesday (T) & Whole Friday (F)
       if (day === 'T' || day === 'F') return true;
-
-      // Constraint 2: Monday (M) & Thursday (H) are busy 7 AM - 3 PM
-      // 7 AM = 420, 3 PM = 900
       if ((day === 'M' || day === 'H') && timeVal >= 420 && timeVal < 900) return true;
-
-      // Constraint 3: Wednesday (W) & Saturday (S)
       if (day === 'W' || day === 'S') {
-        // Busy 9 AM - 1 PM (540 - 780)
         if (timeVal >= 540 && timeVal < 780) return true;
-        
-        // Busy 5 PM - 7 PM (1020 - 1140)
         if (timeVal >= 1020 && timeVal < 1140) return true;
       }
-      
       return false;
     };
-    // 2. Is Another Group Booked?
-    // We treat other group bookings as occupying a 1-hour block starting at their consultation time
+    
     const isOtherGroupBusy = (day: string, timeVal: number) => {
       return otherGroups.some(g => {
         if (!g.consultationDay || !g.consultationTime) return false;
         if (DAY_TO_CODE[g.consultationDay] !== day) return false;
-        
         const gStart = parseTimeValue(g.consultationTime);
-        // Assuming other groups take 1 hour. If timeVal falls within [Start, Start + 60)
         return timeVal >= gStart && timeVal < (gStart + 60);
       });
     };
 
-    // 3. Iterate Days and Time Slots
     DAYS.forEach(day => {
       const validSlots: string[] = [];
-
       for (let i = 0; i < TIME_SLOTS.length - 1; i++) {
         const t1Str = TIME_SLOTS[i];
         const t2Str = TIME_SLOTS[i+1];
-        
         const t1Val = timeToMin(t1Str);
         const t2Val = timeToMin(t2Str);
 
-        // Check Condition 1: User Personal Schedule
         if (isUserBusy(day, t1Val) || isUserBusy(day, t2Val)) continue;
-
-        // Check Condition 2: Other Groups
         if (isOtherGroupBusy(day, t1Val) || isOtherGroupBusy(day, t2Val)) continue;
 
-        // Check Condition 3: Current Group Members (Heatmap Availability)
         const busy1 = getBusyMembers(day, t1Str);
         const busy2 = getBusyMembers(day, t2Str);
         
         if (busy1.length === 0 && busy2.length === 0) {
-          // Found a 1-hour block!
-          // t1Val is start, t2Val is +30min. End time is +60min.
           const endTimeVal = t1Val + 60;
           const displayStr = `${minToDisplay(t1Val)} - ${minToDisplay(endTimeVal)}`;
           validSlots.push(displayStr);
@@ -294,10 +337,8 @@ export default function ScheduleManager() {
     return options;
   }, [members, groups, selectedGroupId, viewMode]);
 
-  // --- DERIVED STATE ---
   const currentGroup = groups.find(g => g._id === selectedGroupId);
   const currentGroupName = selectedGroupId === "manual" ? "Manual Entry" : currentGroup?.groupName || "Unknown Group";
-  
   const consultationDayCode = currentGroup ? DAY_TO_CODE[currentGroup.consultationDay] : null;
   const consultationTime24 = currentGroup ? convertDBTimeToHeatmap(currentGroup.consultationTime) : null;
 
@@ -305,7 +346,6 @@ export default function ScheduleManager() {
     <div className="min-h-screen bg-slate-50/50 p-4 md:p-10 animate-in fade-in duration-700">
       <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* --- VIEW: DASHBOARD --- */}
         {viewMode === 'dashboard' && (
           <>
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
@@ -383,10 +423,8 @@ export default function ScheduleManager() {
           </>
         )}
 
-        {/* --- VIEW: EDITOR (PARSER + HEATMAP) --- */}
         {viewMode === 'editor' && (
           <div className="space-y-6 animate-in slide-in-from-right-10 duration-500">
-            {/* Header */}
             <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
               <div className="flex items-start gap-4">
                 <button 
@@ -417,7 +455,6 @@ export default function ScheduleManager() {
               </div>
             </header>
 
-            {/* Parsing Area */}
             <div className="bg-white rounded-[30px] md:rounded-[40px] border border-slate-200 shadow-xl overflow-hidden">
               <div className="flex w-full border-b border-slate-100 bg-slate-50/50 overflow-x-auto scrollbar-hide">
                 {members.map((m, i) => (
@@ -447,7 +484,6 @@ export default function ScheduleManager() {
               </div>
             </div>
 
-            {/* Heatmap Area */}
             <div className="bg-white rounded-[30px] md:rounded-[40px] border border-slate-200 shadow-2xl overflow-hidden">
               <div className="p-6 md:p-8 border-b border-slate-100 bg-slate-50/30 flex items-center gap-3">
                 <Calendar className="text-blue-600" size={20} />
@@ -511,7 +547,6 @@ export default function ScheduleManager() {
               </div>
             </div>
 
-            {/* --- NEW SECTION: ALTERNATE OPTIONS --- */}
             <div className="bg-slate-900 rounded-[30px] md:rounded-[40px] border border-slate-800 shadow-2xl overflow-hidden text-slate-100">
                <div className="p-6 md:p-8 border-b border-slate-800 flex items-center gap-3">
                  <Sparkles className="text-amber-400" size={20} />
@@ -526,26 +561,26 @@ export default function ScheduleManager() {
                         No 1-hour slots available that match all criteria.
                      </div>
                   ) : (
-                    DAYS.map(day => {
-                       const slots = alternateSlots[day];
-                       if (!slots) return null;
-                       return (
-                          <div key={day} className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
-                             <div className="flex items-center gap-2 mb-3">
-                                <span className="text-xl font-bold text-slate-200">{DAY_LABELS[day]}</span>
-                                <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">{slots.length} options</span>
-                             </div>
-                             <div className="space-y-2">
-                                {slots.map((slot, idx) => (
-                                   <div key={idx} className="text-sm font-mono text-emerald-400 flex items-center gap-2 bg-slate-950/30 p-2 rounded-lg border border-slate-800">
-                                      <CheckCircle2 size={12} />
-                                      {slot}
-                                   </div>
-                                ))}
-                             </div>
-                          </div>
-                       );
-                    })
+                     DAYS.map(day => {
+                        const slots = alternateSlots[day];
+                        if (!slots) return null;
+                        return (
+                           <div key={day} className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
+                              <div className="flex items-center gap-2 mb-3">
+                                 <span className="text-xl font-bold text-slate-200">{DAY_LABELS[day]}</span>
+                                 <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">{slots.length} options</span>
+                              </div>
+                              <div className="space-y-2">
+                                 {slots.map((slot, idx) => (
+                                    <div key={idx} className="text-sm font-mono text-emerald-400 flex items-center gap-2 bg-slate-950/30 p-2 rounded-lg border border-slate-800">
+                                       <CheckCircle2 size={12} />
+                                       {slot}
+                                    </div>
+                                 ))}
+                              </div>
+                           </div>
+                        );
+                     })
                   )}
                </div>
             </div>

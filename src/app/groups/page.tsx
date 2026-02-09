@@ -2,18 +2,38 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Save, Trash2, Pin, Edit3, X, Users, Crown, 
-  GraduationCap, LayoutGrid, CalendarClock, Clock, Laptop, School, Plus, ChevronUp
+  GraduationCap, LayoutGrid, CalendarClock, Clock, Laptop, School, Plus, ChevronUp,
+  Calendar, Briefcase, Globe, UserCheck, Layers
 } from 'lucide-react'; 
-import { saveGroupToDB, getGroupsFromDB, deleteGroup, updateGroup, togglePinGroup } from "@/app/actions";
+import { saveGroupToDB, deleteGroup, updateGroup, togglePinGroup } from "@/app/actions";
 import { useRouter } from 'next/navigation';
-import { recordAuditLog } from "@/app/actions";
 
+// 🟢 HELPER: Tab Button Component for the "Valorant" feel
+const TabButton = ({ active, label, onClick, icon }: any) => (
+  <button
+    onClick={onClick}
+    className={`
+      flex items-center gap-2 px-6 py-3 text-xs font-black tracking-widest uppercase transition-all duration-200 rounded-xl
+      ${active 
+        ? "bg-slate-800 text-white shadow-lg shadow-slate-500/30 scale-105" 
+        : "bg-white text-slate-400 hover:text-slate-600 hover:bg-slate-50 border border-transparent hover:border-slate-200"
+      }
+    `}
+  >
+    {icon}
+    {label}
+  </button>
+);
 
 export default function GroupsPage() {
+  // 🟢 STATE: View Mode (Valorant Logic)
+  const [viewMode, setViewMode] = useState<'mentoring' | 'panel' | 'all'>('mentoring');
+  
   const [groups, setGroups] = useState<any[]>([]);
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [showForm, setShowForm] = useState(false); // NEW: Controls form visibility
+  const [isLoading, setIsLoading] = useState(true); // Added loading state
+  const [showForm, setShowForm] = useState(false);
   const router = useRouter();
   const [sortBy, setSortBy] = useState<'newest' | 'alphabetical' | 'group'>('newest');
 
@@ -31,7 +51,6 @@ export default function GroupsPage() {
     "Ms. Elisa Malasaga"
   ];
 
-  // --- NEW: DEFENSE MODE CONSTANTS ---
   const ONLINE_PMS = ["Dr. Angelo Arguson", "Ms. Elisa Malasaga"];
   const F2F_PMS = ["Dr. Hadji Tejuco", "Dr. Beau Gray Habal", "Dr. Hazel Patilano"];
 
@@ -56,6 +75,11 @@ export default function GroupsPage() {
     sections: string[];
     consultationDay: string;
     consultationTime: string;
+    finalDefenseDate: string; 
+    finalDefenseTime: string;
+    panelChair: string;
+    panelInternal: string;
+    panelExternal: string;
   }
 
   const [formData, setFormData] = useState<FormData>({
@@ -67,46 +91,53 @@ export default function GroupsPage() {
     pmAdviser: '',     
     sections: [],
     consultationDay: '',
-    consultationTime: ''
+    consultationTime: '',
+    finalDefenseDate: '',
+    finalDefenseTime: '',
+    panelChair: '',
+    panelInternal: '',
+    panelExternal: ''
   });
 
+  // 🟢 UPDATED: Load Data based on View Mode
   const loadData = async () => {
-    const data = await getGroupsFromDB();
-    setGroups(data || []);
+    setIsLoading(true);
+    try {
+      // We use the API route we created to handle the filtering logic
+      const res = await fetch(`/api/groups?view=${viewMode}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      setGroups(data || []);
+    } catch (error) {
+      console.error("Load Error:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
+  // 🟢 UPDATED: Re-fetch when viewMode changes
   useEffect(() => {
     loadData();
-  }, []); 
+  }, [viewMode]); 
 
-const handleTogglePin = async (id: string, currentStatus: boolean) => {
+  const handleTogglePin = async (id: string, currentStatus: boolean) => {
     try {
-      // 1. Flip the status here
       const newStatus = !currentStatus;
-      
-      // 2. Call the server action with the NEW status
       const res = await togglePinGroup(id, newStatus);
-      
-      // 3. Check if server actually succeeded
       if (res) {
-        await loadData(); // Reload from DB
-        router.refresh(); // Force Next.js to clear cache
+        await loadData();
+        router.refresh();
       }
     } catch (error) {
       console.error("Pin Error:", error);
     }
   };
 
- const sortedGroups = [...groups].sort((a, b) => {
-    // Pinned always comes first
+  const sortedGroups = [...groups].sort((a, b) => {
     if (a.isPinned && !b.isPinned) return -1;
     if (!a.isPinned && b.isPinned) return 1;
-
-    // Then handle other sorts
     if (sortBy === 'alphabetical') return a.thesisTitle.localeCompare(b.thesisTitle);
     if (sortBy === 'group') return a.groupName.localeCompare(b.groupName);
-    
-    // Default: Newest
     return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
   });
 
@@ -123,9 +154,8 @@ const handleTogglePin = async (id: string, currentStatus: boolean) => {
 
   const handleEdit = (g: any) => {
     setIsEditing(g._id);
-    setShowForm(true); // Auto-open form when editing
+    setShowForm(true);
     
-    // SAFETY CHECK
     let safeSections: string[] = [];
     if (Array.isArray(g.sections)) {
       safeSections = g.sections;
@@ -141,14 +171,18 @@ const handleTogglePin = async (id: string, currentStatus: boolean) => {
         ? [...g.members, "", "", "", ""].slice(0, 4) 
         : ['', '', '', ''],
       assignPM: g.assignPM || '',
-      se2Adviser: g.se2Adviser || '',
-      pmAdviser: g.pmAdviser || '',
+      se2Adviser: g.se2Adviser || g.advisers?.seAdviser || '',
+      pmAdviser: g.pmAdviser || g.advisers?.pmAdviser || '',
       sections: safeSections, 
       consultationDay: g.consultationDay || '', 
-      consultationTime: g.consultationTime || '' 
+      consultationTime: g.consultationTime || '' ,
+      finalDefenseDate: g.finalDefense?.date || '',
+      finalDefenseTime: g.finalDefense?.time || '',
+      panelChair: g.panelists?.chair || '',
+      panelInternal: g.panelists?.internal || '',
+      panelExternal: g.panelists?.external || ''
     });
 
-    // Timeout to allow render before scrolling
     setTimeout(() => {
       const element = document.getElementById('form-top');
       if (element) {
@@ -163,7 +197,9 @@ const handleTogglePin = async (id: string, currentStatus: boolean) => {
     setFormData({
         groupName: '', thesisTitle: '', members: ['', '', '', ''], assignPM: '', 
         se2Adviser: '', pmAdviser: '', sections: [], 
-        consultationDay: '', consultationTime: '' 
+        consultationDay: '', consultationTime: '' ,
+        finalDefenseDate: '', finalDefenseTime: '',
+        panelChair: '', panelInternal: '', panelExternal: ''
     });
   };
 
@@ -176,8 +212,23 @@ const handleTogglePin = async (id: string, currentStatus: boolean) => {
     setIsSaving(true);
     
     const dataToSave = {
-      ...formData,
+      groupName: formData.groupName,
+      thesisTitle: formData.thesisTitle,
       members: formData.members.filter(m => m.trim() !== ""),
+      assignPM: formData.assignPM,
+      se2Adviser: formData.se2Adviser,
+      pmAdviser: formData.pmAdviser,
+      sections: formData.sections,
+      consultationDay: formData.consultationDay,
+      consultationTime: formData.consultationTime,
+      finalDefense: {
+        date: formData.finalDefenseDate,
+        time: formData.finalDefenseTime
+      },
+      panelChair: formData.panelChair,
+      panelInternal: formData.panelInternal,
+      panelExternal: formData.panelExternal,
+      
       createdAt: isEditing ? undefined : new Date().toISOString() 
     };
 
@@ -188,7 +239,7 @@ const handleTogglePin = async (id: string, currentStatus: boolean) => {
 
       if (result.success) {
         await loadData();
-        handleCloseForm(); // Close form on success
+        handleCloseForm();
       }
     } catch (error) {
       console.error("Save Error:", error);
@@ -203,8 +254,8 @@ const handleTogglePin = async (id: string, currentStatus: boolean) => {
     setFormData({ ...formData, members: newMembers });
   };
 
-return (
-    <div className="max-w-7xl mx-auto space-y-12 p-6 pb-20">
+  return (
+    <div className="max-w-7xl mx-auto space-y-8 p-6 pb-20">
       
       {/* HEADER SECTION */}
       <header className="px-2">
@@ -214,9 +265,32 @@ return (
         <p className="text-slate-500 mt-2 font-medium">Manage active mentoring groups, advisers, and sections.</p>
       </header>
 
+      {/* 🟢 VALORANT STYLE VIEW SWITCHER */}
+      <div className="flex flex-wrap gap-2 px-2 py-2">
+         <div className="bg-slate-100 p-1.5 rounded-2xl flex flex-wrap gap-1">
+            <TabButton 
+              label="My Mentoring" 
+              active={viewMode === 'mentoring'} 
+              onClick={() => setViewMode('mentoring')}
+              icon={<UserCheck size={14} strokeWidth={3} />}
+            />
+            <TabButton 
+              label="My Panel Board" 
+              active={viewMode === 'panel'} 
+              onClick={() => setViewMode('panel')}
+              icon={<Layers size={14} strokeWidth={3} />}
+            />
+            <TabButton 
+              label="All Groups" 
+              active={viewMode === 'all'} 
+              onClick={() => setViewMode('all')}
+              icon={<Globe size={14} strokeWidth={3} />}
+            />
+         </div>
+      </div>
+
       {/* ACTIONS & SORTING ROW */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 px-2">
-        {/* Register Button - Left Side */}
         <div className="w-full md:w-auto">
           {!showForm && (
             <button 
@@ -229,7 +303,6 @@ return (
           )}
         </div>
 
-        {/* Sort Dropdown - Right Side */}
         <div className="w-full md:w-auto">
           <select 
             value={sortBy} 
@@ -248,8 +321,8 @@ return (
       <section className="bg-white rounded-[40px] border border-slate-200 shadow-xl p-10 space-y-8 animate-in slide-in-from-top-4 duration-300">
         <div className="flex justify-between items-center border-b border-slate-100 pb-6">
           <h2 id="form-top" className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-             {isEditing ? <Edit3 className="text-blue-500" /> : <Plus className="text-green-500" />}
-             {isEditing ? 'Update Group Details' : 'Register New Group'}
+              {isEditing ? <Edit3 className="text-blue-500" /> : <Plus className="text-green-500" />}
+              {isEditing ? 'Update Group Details' : 'Register New Group'}
           </h2>
           
           <button 
@@ -324,14 +397,14 @@ return (
           </div>
         </div>
 
-        {/* --- ADVISERS & CONSULTATION ROW --- */}
+        {/* --- ADVISERS & SCHEDULE ROW --- */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Advisers Column */}
+            {/* COLUMN 1: Advisers */}
             <div className="space-y-4">
-                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-6">
                     <GraduationCap size={16} className="text-blue-500"/> Advisers
                 </h3>
-                <div className="space-y-3">
+                <div className="space-y-5">
                     <div>
                         <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">SE II Professor</label>
                         <select
@@ -357,42 +430,111 @@ return (
                 </div>
             </div>
 
-            {/* NEW: Consultation Schedule Column */}
-            <div className="space-y-4">
-                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                    <CalendarClock size={16} className="text-amber-500"/> Consultation Schedule
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Day</label>
-                        <select
-                            value={formData.consultationDay}
-                            onChange={(e) => setFormData({ ...formData, consultationDay: e.target.value })}
-                            className="w-full bg-amber-50 border border-amber-100 text-amber-900 p-3 rounded-xl focus:outline-none focus:border-amber-400 text-sm font-bold"
-                        >
-                        <option value="">Select Day</option>
-                        {DAYS_OPTIONS.map((day) => <option key={day} value={day}>{day}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Time</label>
-                        <select
-                            value={formData.consultationTime}
-                            onChange={(e) => setFormData({ ...formData, consultationTime: e.target.value })}
-                            className="w-full bg-amber-50 border border-amber-100 text-amber-900 p-3 rounded-xl focus:outline-none focus:border-amber-400 text-sm font-bold"
-                        >
-                        <option value="">Select Time</option>
-                        {TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}
-                        </select>
+            {/* COLUMN 2: SCHEDULES (Consultation + Final Defense) */}
+            <div className="flex flex-col gap-6">
+                
+                {/* 1. Consultation Schedule */}
+                <div className="bg-amber-50/50 p-5 rounded-2xl border border-amber-100">
+                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-4">
+                        <CalendarClock size={16} className="text-amber-500"/> Consultation Schedule
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Day</label>
+                            <select
+                                value={formData.consultationDay}
+                                onChange={(e) => setFormData({ ...formData, consultationDay: e.target.value })}
+                                className="w-full bg-white border border-amber-200 text-amber-900 p-3 rounded-xl focus:outline-none focus:border-amber-400 text-sm font-bold"
+                            >
+                            <option value="">Select Day</option>
+                            {DAYS_OPTIONS.map((day) => <option key={day} value={day}>{day}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Time</label>
+                            <select
+                                value={formData.consultationTime}
+                                onChange={(e) => setFormData({ ...formData, consultationTime: e.target.value })}
+                                className="w-full bg-white border border-amber-200 text-amber-900 p-3 rounded-xl focus:outline-none focus:border-amber-400 text-sm font-bold"
+                            >
+                            <option value="">Select Time</option>
+                            {TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}
+                            </select>
+                        </div>
                     </div>
                 </div>
-                <p className="text-[10px] text-slate-400 italic">
-                    * Schedule is set for weekly recurring consultations.
-                </p>
+
+                {/* 2. Final Defense Schedule (Below Consultation) */}
+                <div className="bg-green-50/50 p-5 rounded-2xl border border-green-100">
+                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-4">
+                        <Calendar size={16} className="text-green-600"/> Final Defense Schedule
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Date</label>
+                            <input 
+                                type="date"
+                                value={formData.finalDefenseDate}
+                                onChange={(e) => setFormData({ ...formData, finalDefenseDate: e.target.value })}
+                                className="w-full bg-white border border-green-200 text-green-900 p-3 rounded-xl focus:outline-none focus:border-green-400 text-sm font-bold"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Time</label>
+                            <select
+                                value={formData.finalDefenseTime} 
+                                onChange={(e) => setFormData({ ...formData, finalDefenseTime: e.target.value })} 
+                                className="w-full bg-white border border-green-200 text-green-900 p-3 rounded-xl focus:outline-none focus:border-green-400 text-sm font-bold"
+                            >
+                            <option value="">Select Time</option>
+                            {TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        {/* Row 3: Members */}
+        {/* Panel Board Composition */}
+        <div className="pt-6 border-t border-slate-100">
+          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-4">
+              <Users size={16} className="text-purple-500"/> Panel Board Composition
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             {/* Panel Chair */}
+             <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Panel Chair</label>
+                <input 
+                  className="w-full bg-slate-50 border border-slate-100 p-3 rounded-xl outline-none focus:border-purple-300 transition-all text-sm font-semibold"
+                  value={formData.panelChair}
+                  onChange={e => setFormData({...formData, panelChair: e.target.value})}
+                  placeholder="Chairperson Name"
+                />
+             </div>
+             {/* Internal */}
+             <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Internal Panel</label>
+                <input 
+                  className="w-full bg-slate-50 border border-slate-100 p-3 rounded-xl outline-none focus:border-purple-300 transition-all text-sm font-semibold"
+                  value={formData.panelInternal}
+                  onChange={e => setFormData({...formData, panelInternal: e.target.value})}
+                  placeholder="Internal Member"
+                />
+             </div>
+             {/* External */}
+             <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">External Panel</label>
+                <input 
+                  className="w-full bg-slate-50 border border-slate-100 p-3 rounded-xl outline-none focus:border-purple-300 transition-all text-sm font-semibold"
+                  value={formData.panelExternal}
+                  onChange={e => setFormData({...formData, panelExternal: e.target.value})}
+                  placeholder="External Member"
+                />
+             </div>
+          </div>
+        </div>
+
+        {/* Row 4: Members */}
         <div className="space-y-4 pt-4 border-t border-slate-100">
           <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-2">Team Members</label>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
@@ -445,16 +587,21 @@ return (
       </section>
       )}
 
-
-
-     {/* GROUPS LIST */}
+      {/* 🟢 GROUPS LIST */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
+           {[1,2,3].map(i => <div key={i} className="h-96 bg-slate-200 rounded-[40px]"></div>)}
+        </div>
+      ) : sortedGroups.length === 0 ? (
+        <div className="text-center py-24 bg-slate-50 rounded-[40px] border-2 border-dashed border-slate-200">
+           <p className="text-slate-400 font-bold text-lg">No groups found in {viewMode} view.</p>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {sortedGroups.map((group) => {
-          // 1. Determine Defense Mode based on PM Adviser
-          const isOnline = ONLINE_PMS.includes(group.pmAdviser);
-          const isF2F = F2F_PMS.includes(group.pmAdviser);
+          const isOnline = ONLINE_PMS.includes(group.pmAdviser || group.advisers?.pmAdviser);
+          const isF2F = F2F_PMS.includes(group.pmAdviser || group.advisers?.pmAdviser);
 
-          // 2. Define Dynamic Styles
           let cardClasses = "bg-white border-slate-200 hover:border-slate-400"; 
           let statusBadge = null;
 
@@ -475,6 +622,10 @@ return (
           } else if (group.isPinned) {
              cardClasses = "border-amber-200 bg-amber-50/10";
           }
+
+          // Safely access nested props
+          const displaySE = group.se2Adviser || group.advisers?.seAdviser || "—";
+          const displayPM = group.pmAdviser || group.advisers?.pmAdviser || "—";
 
           return (
             <div 
@@ -546,11 +697,11 @@ return (
                 <div className="grid grid-cols-2 gap-2 mb-4">
                    <div className="bg-white/60 p-3 rounded-xl border border-slate-100">
                       <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">SE2 Adviser</p>
-                      <p className="text-xs font-bold text-slate-700 truncate">{group.se2Adviser || "—"}</p>
+                      <p className="text-xs font-bold text-slate-700 truncate">{displaySE}</p>
                    </div>
                    <div className={`p-3 rounded-xl border transition-colors ${isOnline ? 'bg-yellow-100 border-yellow-200' : isF2F ? 'bg-blue-100 border-blue-200' : 'bg-white/60 border-slate-100'}`}>
                       <p className={`text-[8px] font-black uppercase tracking-widest mb-1 ${isOnline ? 'text-yellow-600' : isF2F ? 'text-blue-600' : 'text-slate-400'}`}>PM Adviser</p>
-                      <p className={`text-xs font-bold truncate ${isOnline ? 'text-yellow-900' : isF2F ? 'text-blue-900' : 'text-slate-700'}`}>{group.pmAdviser || "—"}</p>
+                      <p className={`text-xs font-bold truncate ${isOnline ? 'text-yellow-900' : isF2F ? 'text-blue-900' : 'text-slate-700'}`}>{displayPM}</p>
                    </div>
                 </div>
 
@@ -567,25 +718,42 @@ return (
                   ))}
                 </div>
 
-                {/* BOTTOM: CONSULTATION TIME */}
-                <div className="pt-3 border-t border-slate-200/50 flex items-center justify-between gap-2">
+                {/* BOTTOM: CONSULTATION & DEFENSE DATES */}
+                <div className="pt-3 border-t border-slate-200/50 flex flex-col gap-2">
+                  {/* Consultation */}
                   <div className="flex items-center gap-2">
                       <div className="bg-slate-100 p-1.5 rounded-lg text-slate-500">
                           <Clock size={14} />
                       </div>
                       <div className="flex flex-col">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Consultation Time</span>
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Consultation</span>
                           <span className="text-xs font-bold text-slate-700">
-                              {group.consultationDay || "Day Unset"} @ {group.consultationTime || "Time Unset"}
+                              {group.consultationDay || "Unset"} @ {group.consultationTime || "--:--"}
                           </span>
                       </div>
                   </div>
+
+                  {/* Final Defense (Only show if set) */}
+                  {group.finalDefense && group.finalDefense.date && (
+                    <div className="flex items-center gap-2">
+                         <div className="bg-green-100 p-1.5 rounded-lg text-green-600">
+                             <Calendar size={14} />
+                         </div>
+                         <div className="flex flex-col">
+                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Final Defense</span>
+                             <span className="text-xs font-bold text-slate-700">
+                                 {group.finalDefense.date} @ {group.finalDefense.time}
+                             </span>
+                         </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           );
-      })}
+        })}
       </div>
+      )}
     </div>
   );
 }

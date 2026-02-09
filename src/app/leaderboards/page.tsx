@@ -15,6 +15,8 @@ import { recordAuditLog } from "@/app/actions";
 interface Group {
   _id: string;
   groupName: string;
+  // We allow extra properties (like panelists) for filtering without breaking TS
+  [key: string]: any; 
 }
 
 interface Task {
@@ -40,6 +42,9 @@ export default function LeaderboardPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
+  // --- ADDED: User State ---
+  const [currentUser, setCurrentUser] = useState("");
+
   // Raw Data
   const [groups, setGroups] = useState<Group[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -48,17 +53,57 @@ export default function LeaderboardPage() {
   // Computed Data
   const [rankedGroups, setRankedGroups] = useState<GroupWithScore[]>([]);
 
-  // 1. Fetch Data
+  // --- ADDED: Get Current User ---
+  useEffect(() => {
+    const storedUser = localStorage.getItem("audit_user") || localStorage.getItem("currentUser");
+    if (storedUser) {
+        // Remove quotes if they exist
+        setCurrentUser(storedUser.replace(/^"|"$/g, ''));
+    }
+  }, []);
+
+  // 1. Fetch Data & Filter
   useEffect(() => {
     async function load() {
       const data = await getLeaderboardData();
-      setGroups(data.groups || []);
+      
+      const allGroups = data.groups || [];
+
+      // --- FILTERING LOGIC START ---
+      // 1. Define keywords that identify YOU (case-insensitive)
+      const myNameKeywords = [
+          currentUser, 
+          "Pura", 
+          "Justine", 
+          "Jude"
+      ].filter(Boolean).map(n => n.toLowerCase());
+
+      // 2. Filter out groups where you are a panelist
+      const myMenteeGroups = allGroups.filter((g: any) => {
+          const p = g.panelists || {};
+          
+          // Combine all panelist names into one string
+          const panelistString = `${p.chair || ''} ${p.internal || ''} ${p.external || ''}`.toLowerCase();
+
+          // Check if your name appears in the panelist list
+          const amIPanelist = myNameKeywords.some(keyword => 
+              panelistString.includes(keyword)
+          );
+
+          // Return TRUE only if you are NOT a panelist (so you only see mentees)
+          return !amIPanelist; 
+      });
+      // --- FILTERING LOGIC END ---
+
+      setGroups(myMenteeGroups);
       setTasks(data.tasks || []);
       setProgressData(data.progress || []);
       setIsLoading(false);
     }
+    
+    // Reload if currentUser changes
     load();
-  }, []);
+  }, [currentUser]);
 
   // 2. Calculate Scores & Ranks
   useEffect(() => {

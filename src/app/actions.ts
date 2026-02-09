@@ -8,9 +8,9 @@ import AuditLog  from "@/models/AuditLog";
 import { revalidatePath } from "next/cache";
 import mongoose from "mongoose";
 import { headers, cookies } from "next/headers"; 
-import { User } from "lucide-react";
 
 // --- DEFINING THE INTERFACE ---
+// Updated to include the flat panelist fields sent by the frontend
 export interface GroupData {
   _id?: string;
   groupName: string;
@@ -22,6 +22,9 @@ export interface GroupData {
   pmAdviser?: string;
   consultationDay?: string;
   consultationTime?: string;
+  panelChair?: string;    // Added
+  panelInternal?: string; // Added
+  panelExternal?: string; // Added
   files?: {
     fileId: string;
     name: string;
@@ -33,6 +36,16 @@ export interface GroupData {
   createdAt?: string;
 }
 
+// --- HELPER: SANITIZE KEY ---
+const sanitizeKey = (key: string) => {
+  if (!key) return "";
+  return key
+    .toLowerCase()
+    .replace(/\./g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
 // --- LEADERBOARD & PROGRESS ---
 export async function getLeaderboardData() {
   await dbConnect();
@@ -41,7 +54,6 @@ export async function getLeaderboardData() {
   const tasks = await Task.find({}).sort({ deadline: 1 }).lean(); 
   const progress = await Progress.find({}).lean();
 
-  // ✅ FIX: Sanitize all returns
   return {
     groups: JSON.parse(JSON.stringify(groups)),
     tasks: JSON.parse(JSON.stringify(tasks)),
@@ -72,6 +84,8 @@ export async function updateGroupProgress(groupId: string, taskId: string, statu
 export async function saveGroupToDB(formData: GroupData) {
   try {
     await dbConnect();
+    
+    // Construct the group object with the nested panelists
     const newGroup = await Group.create({
       groupName: formData.groupName,
       thesisTitle: formData.thesisTitle,
@@ -81,6 +95,12 @@ export async function saveGroupToDB(formData: GroupData) {
       advisers: { seAdviser: formData.se2Adviser || "", pmAdviser: formData.pmAdviser || "" },
       consultationSchedule: { day: formData.consultationDay || "", time: formData.consultationTime || "" },
       isPinned: false,
+      // 👇 Mapped flat frontend fields to nested DB object
+      panelists: {
+        chair: formData.panelChair || "",
+        internal: formData.panelInternal || "",
+        external: formData.panelExternal || "",
+      },
       createdAt: new Date().toISOString()
     });
 
@@ -89,6 +109,7 @@ export async function saveGroupToDB(formData: GroupData) {
     revalidatePath('/groups'); 
     return { success: true };
   } catch (error) {
+    console.error("Save Group Error:", error);
     return { success: false };
   }
 }
@@ -112,30 +133,27 @@ export async function togglePinGroup(groupId: string, currentStatus: boolean) {
 export async function getGroupsFromDB() {
   try {
     await dbConnect();
-    // Fetch data and convert to plain JS objects
+
+    if (mongoose.connection.readyState !== 1) {
+      console.error("⚠️ MongoDB is not connected.");
+      return [];
+    }
+
     const groups = await Group.find({}).sort({ createdAt: -1 }).lean();
     
-    // Process the groups to handle nested fields and nulls
     const formattedGroups = groups.map((group: any) => ({
       ...group,
-      // 1. Convert Root ID
       _id: group._id.toString(),
       assignPM: group.projectManager || group.assignPM || "",
-      
-      // 2. UNPACK ADVISERS
       se2Adviser: group.advisers?.seAdviser || group.se2Adviser || "",
       pmAdviser: group.advisers?.pmAdviser || group.pmAdviser || "",
-
-      // 3. UNPACK SCHEDULE
       consultationDay: group.consultationSchedule?.day || group.consultationDay || "",
       consultationTime: group.consultationSchedule?.time || group.consultationTime || "",
-
-      // 4. Convert Dates
+      // 👇 Ensure panelists object exists in the response
+      panelists: group.panelists || { chair: "", internal: "", external: "" }, 
       createdAt: group.createdAt ? new Date(group.createdAt).toISOString() : null,
       updatedAt: group.updatedAt ? new Date(group.updatedAt).toISOString() : null,
       mockDefenseDate: group.mockDefenseDate ? new Date(group.mockDefenseDate).toISOString() : null,
-
-      // 5. Handle Files
       files: (group.files || []).map((file: any) => {
         if (typeof file === 'string') {
             return {
@@ -152,8 +170,6 @@ export async function getGroupsFromDB() {
             uploadDate: file.uploadDate ? new Date(file.uploadDate).toISOString() : null
         };
       }),
-
-      // 6. Handle Defense Grades
       mockDefenseGrades: (group.mockDefenseGrades || []).map((grade: any) => ({
         ...grade,
         _id: grade._id ? grade._id.toString() : null, 
@@ -161,39 +177,40 @@ export async function getGroupsFromDB() {
       }))
     }));
 
-    // ✅ FIX: "Nuclear" Deep Clean
     return JSON.parse(JSON.stringify(formattedGroups));
-
   } catch (error) {
     console.error("Failed to fetch groups:", error);
     return [];
   }
 }
 
-const sanitizeKey = (key: string) => key.replace(/\./g, ' ');
-
+// --- UPDATED: GROUP SCHEDULE SYNC ---
 export async function updateGroupSchedule(groupId: string, scheduleData: any) {
   try {
     await dbConnect();
-    const cleanData: any = {};
-    Object.keys(scheduleData).forEach(name => {
-      cleanData[sanitizeKey(name)] = scheduleData[name];
+    
+    const sanitizedData: Record<string, any> = {};
+    Object.keys(scheduleData).forEach(key => {
+      sanitizedData[sanitizeKey(key)] = scheduleData[key];
     });
 
-    const group = await Group.findById(groupId);
-    if (!group) return { success: false, error: "Group not found" };
+    const updatedGroup = await Group.findByIdAndUpdate(
+      groupId,
+      { $set: { schedules: sanitizedData } },
+      { new: true } 
+    ).lean();
 
-    group.schedules = cleanData;
-    group.markModified('schedules');
+    if (!updatedGroup) throw new Error("Group not found");
 
-    await group.save();
-    revalidatePath('/parser'); 
-    revalidatePath('/groups'); 
-    
-    return { success: true };
-  } catch (error: any) {
-    console.error("Save Error:", error);
-    return { success: false, error: error.message };
+    revalidatePath('/groups');
+
+    return { 
+      success: true, 
+      updatedGroup: JSON.parse(JSON.stringify(updatedGroup)) 
+    };
+  } catch (error) {
+    console.error("Database Update Error:", error);
+    return { success: false, error: "Failed to update schedule" };
   }
 }
 
@@ -212,15 +229,69 @@ export async function deleteGroup(groupId: string) {
   }
 }
 
-export async function updateGroup(groupId: string, formData: GroupData) {
+export async function updateGroup(groupId: string, formData: any) {
   try {
     await dbConnect();
-    await Group.findByIdAndUpdate(groupId, formData);
+    
+    // 1. Construct the NESTED objects cleanly
+    const advisersData = {
+        seAdviser: formData.se2Adviser || formData.advisers?.seAdviser || "",
+        pmAdviser: formData.pmAdviser || formData.advisers?.pmAdviser || ""
+    };
+
+    const panelistsData = {
+        chair: formData.panelChair || formData.panelists?.chair || "",
+        internal: formData.panelInternal || formData.panelists?.internal || "",
+        external: formData.panelExternal || formData.panelists?.external || ""
+    };
+
+    // 2. Build the STRICT update payload
+    // We do NOT use "...formData" here. We manually select fields to avoid conflicts.
+    const updatePayload: any = {
+        groupName: formData.groupName,
+        thesisTitle: formData.thesisTitle,
+        members: formData.members,
+        sections: formData.sections || [],
+        
+        // Map Frontend names -> Schema names
+        projectManager: formData.assignPM, 
+        
+        // Root level fields (per your latest schema)
+        consultationDay: formData.consultationDay,   
+        consultationTime: formData.consultationTime, 
+        
+        // Nested Objects
+        advisers: advisersData,   // Saves the whole object at once
+        panelists: panelistsData, // Saves the whole object at once
+    };
+
+    // 3. Handle optional complex objects (Only add if they exist)
+    if (formData.finalDefense) {
+        updatePayload.finalDefense = formData.finalDefense;
+    }
+    
+    // 4. Handle Pin status specifically
+    if (typeof formData.isPinned === 'boolean') {
+        updatePayload.isPinned = formData.isPinned;
+    }
+
+    console.log("💾 Saving Clean Payload:", updatePayload);
+
+    // 5. Execute Update
+    const result = await Group.findByIdAndUpdate(groupId, updatePayload, { new: true });
+
+    if (!result) {
+        throw new Error("Group not found");
+    }
+
     await recordAuditLog("Groups", "UPDATE", `Updated group details for: ${formData.groupName}`);
     revalidatePath('/groups');
+    
     return { success: true };
-  } catch (error) {
-    return { success: false };
+
+  } catch (error: any) {
+    console.error("❌ Update Group Error:", error);
+    return { success: false, error: error.message }; 
   }
 }
 
@@ -310,23 +381,20 @@ export async function getDeliverablesFromDB() {
   }
 }
 
-// --- FILE MANAGEMENT (UPDATED FIX) ---
+// --- FILE MANAGEMENT ---
 
 export async function addFileToGroup(groupId: string, fileUrl: string) {
   try {
     await dbConnect();
-
     if (!groupId || !mongoose.Types.ObjectId.isValid(groupId)) {
       return { success: false, error: "Invalid Group ID" };
     }
 
-    // 1. Define primitive strings first (Safety Step)
     const safeFileId = new mongoose.Types.ObjectId().toString();
     const safeName = `Draft - ${new Date().toLocaleDateString()}`;
     const safeDate = new Date().toISOString();
     const safeType = 'PDF';
 
-    // 2. Update Database
     const updatedGroup = await Group.findByIdAndUpdate(
       groupId,
       { 
@@ -347,7 +415,6 @@ export async function addFileToGroup(groupId: string, fileUrl: string) {
       return { success: false, error: "Group not found" };
     }
 
-    // 3. Log Audit
     await recordAuditLog(
       "Files", 
       "UPLOAD", 
@@ -357,8 +424,6 @@ export async function addFileToGroup(groupId: string, fileUrl: string) {
 
     revalidatePath('/files');
 
-    // 4. ✅ RETURN MANUAL OBJECT - "Nuclear Fix"
-    // We construct a brand new object to ensure no Mongoose Hidden Properties exist.
     return JSON.parse(JSON.stringify({ 
       success: true, 
       file: {
@@ -379,13 +444,10 @@ export async function addFileToGroup(groupId: string, fileUrl: string) {
 export async function removeFileFromGroup(groupId: string, fileId: string) {
   try {
     await dbConnect();
-
-    // ⭐ SAFE CHECK
     if (!mongoose.connection.db) {
         throw new Error("Database connection failed or not ready.");
     }
 
-    // 🛑 BYPASS SCHEMA: Use raw MongoDB driver
     await mongoose.connection.db
       .collection('groups')
       .updateOne(
@@ -450,7 +512,6 @@ export async function deleteDefenseGrade(groupId: string, gradeId: string) {
     });
 
     await recordAuditLog("Mock Defense", "DELETE", `Deleted a defense grade for Group ID: ${groupId}`, { groupId, gradeId });
-
     revalidatePath('/mock-defense'); 
     return { success: true };
   } catch (e) {
@@ -458,13 +519,9 @@ export async function deleteDefenseGrade(groupId: string, gradeId: string) {
   }
 }
 
-
-// 4. EDIT A GRADE
 export async function editDefenseGrade(groupId: string, gradeId: string, updatedData: any) {
   try {
     await dbConnect();
-    
-    // 1. Update the specific grade in the array
     await Group.findOneAndUpdate(
       { "_id": groupId, "mockDefenseGrades._id": gradeId },
       {
@@ -477,7 +534,6 @@ export async function editDefenseGrade(groupId: string, gradeId: string, updated
       }
     );
 
-    // 2. Log the update
     await recordAuditLog(
       "Mock Defense",
       "UPDATE",
@@ -485,7 +541,7 @@ export async function editDefenseGrade(groupId: string, gradeId: string, updated
       { groupId, gradeId, newScores: updatedData }
     );
 
-    revalidatePath('/mock-defense'); // Ensure UI updates
+    revalidatePath('/mock-defense');
     return { success: true };
   } catch (e) {
     console.error(e);
@@ -502,33 +558,25 @@ export async function recordAuditLog(
 ) {
   try {
     await dbConnect();
-
-    // 1. DETERMINE USER IDENTITY
     let finalUser = user;
 
-    // If no user was passed (which happens in deleteGroup, deleteTask, etc.)
-    // We look inside the Cookies for the "audit_user"
     if (!finalUser) {
       const cookieStore = await cookies();
       const userCookie = cookieStore.get("audit_user");
-      
-      // If found, use it. If not, default to "Guest"
       finalUser = userCookie ? userCookie.value : "Guest";
     }
 
-    // 2. GET IP ADDRESS
     const headerList = await headers();
     const forwardedFor = headerList.get("x-forwarded-for");
     const realIp = forwardedFor ? forwardedFor.split(',')[0].trim() : "127.0.0.1";
 
-    // 3. CREATE LOG ENTRY
     const logEntry = {
       module,
       action,
       description,
       ipAddress: realIp, 
       details,
-      user: finalUser, // <--- This will now say "Agile Team" instead of "Guest"
+      user: finalUser,
       createdAt: new Date()
     };
     
@@ -542,13 +590,6 @@ export async function getAuditLogs() {
   try {
     await dbConnect();
     const logs = await AuditLog.find({}).sort({ createdAt: -1 }).lean();
-    
-    // DEBUG: Check what we are sending to the frontend
-    if (logs.length > 0) {
-      console.log("📤 FETCHING LOGS. First Log Item Keys:", Object.keys(logs[0]));
-      console.log("   -> First Module Value:", (logs[0] as any).module);
-    }
-    
     return JSON.parse(JSON.stringify(logs));
   } catch (error) {
     console.error("Fetch Error:", error);
@@ -559,13 +600,8 @@ export async function getAuditLogs() {
 export async function clearAuditLogs() {
   try {
     await dbConnect();
-    
-    // Deletes all records in the collection
     await AuditLog.deleteMany({});
-    
-    // Tells Next.js to refresh the data on the Audit Trail page
     revalidatePath("/audit-trail"); 
-    
     return { success: true };
   } catch (error) {
     console.error("❌ Failed to clear logs:", error);
@@ -573,18 +609,12 @@ export async function clearAuditLogs() {
   }
 }
 
-function getClientIp() {
-  throw new Error("Function not implemented.");
-}
-
 export async function setAuthCookie(username: string) {
   const cookieStore = await cookies();
-  
-  // Force set the cookie on the server side
   cookieStore.set("audit_user", username, { 
     path: "/", 
-    secure: process.env.NODE_ENV === "production", // False on localhost, True on Vercel
+    secure: process.env.NODE_ENV === "production", 
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 // 1 day
+    maxAge: 60 * 60 * 24
   });
 }
