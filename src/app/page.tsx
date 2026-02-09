@@ -53,8 +53,8 @@ export default function DashboardPage() {
 
   const [stats, setStats] = useState({ 
     totalGroups: 0, 
-    mentoringCount: 0, // NEW
-    panelingCount: 0,  // NEW
+    mentoringCount: 0, 
+    panelingCount: 0, 
     synced: 0, 
     students: 0, 
     accumulatedScore: 0,
@@ -62,7 +62,10 @@ export default function DashboardPage() {
     tasksDone: 0,        
     tasksOngoing: 0,     
     tasksNotStarted: 0,
-    groupsWithFiles: 0 
+    groupsWithFiles: 0,
+    // --- NEW STATS FOR FILE AUDIT ---
+    menteeFilesCount: 0,
+    nonMenteeFilesCount: 0
   });
 
   const [loading, setLoading] = useState(true);
@@ -95,37 +98,28 @@ export default function DashboardPage() {
         const { groups = [], progress = [] } = lbData || {};
 
   
-        // Regex to match current user name inside panel fields
-        // Using strict name matching logic from your requirements
-        const nameToMatch = "Justine Jude";
-        const userRegex = new RegExp(currentUser, "i");
+        // Regex/Keywords for Role Detection
         const myNameKeywords = ["Pura", "Justine", "Jude", "JJCP"].map(n => n.toLowerCase());
         
         let panelistCount = 0;
 
-        // 2. Count groups where you are a PANELIST
-        groups.forEach((g: any) => {
-            const p = g.panelists || {};
-            
-            // Combine all panelist slots into one string to search easily
-            const panelistString = `${p.chair || ''} ${p.internal || ''} ${p.external || ''}`.toLowerCase();
+        // --- NEW VARIABLES FOR FILE AUDIT ---
+        let totalMenteeFiles = 0;
+        let totalReviewFiles = 0;
+        // ------------------------------------
 
-            // Check if ANY of your keywords appear in the panelist slots
-            const isPanelist = myNameKeywords.some(keyword => 
-                panelistString.includes(keyword)
-            );
-
-            if (isPanelist) {
-                panelistCount++;
-            }
-        });
-
-        // 3. Calculate Mentoring (Total Groups - Panelist Groups)
-        // IMPORTANT: We assign this to 'mentoring' (not mentoringCount) so the rest of your app uses it.
-        const mentoring = groups.length - panelistCount;
-
-        // 1. Calculate Individual Group Scores
+        // 1. Calculate Individual Group Scores & Panelist Counts
         const groupsWithScores = groups.map((group: any) => {
+          // --- Role Detection Logic ---
+          const p = group.panelists || {};
+          const panelistString = `${p.chair || ''} ${p.internal || ''} ${p.external || ''}`.toLowerCase();
+          const isPanelist = myNameKeywords.some(keyword => panelistString.includes(keyword));
+
+          if (isPanelist) {
+             panelistCount++;
+          }
+
+          // --- Score Logic ---
           const groupId = group._id.toString();
           const groupProgress = progress.filter((p: any) => p.groupId === groupId);
           let score = 0;
@@ -133,8 +127,13 @@ export default function DashboardPage() {
             if (p.status === 'Done') score += 10;
             else if (p.status === 'In Progress') score += 5;
           });
-          return { ...group, totalScore: score };
+
+          // --- RETURN ENRICHED OBJECT FOR NEXT STEPS ---
+          return { ...group, totalScore: score, isPanelistGroup: isPanelist };
         });
+
+        // Mentoring is Total - Panelist
+        const mentoring = groups.length - panelistCount;
 
         // 2. Sort for Leaderboard
         const sorted = groupsWithScores.sort((a: any, b: any) => {
@@ -181,12 +180,23 @@ export default function DashboardPage() {
         const totalExpected = groups.length * pastTasks.length;
         const countNotStarted = Math.max(0, totalExpected - (countDone + countOngoing));
 
-        // 5. Process Files
+        // 5. Process Files (WITH AUDIT)
         let allFiles: any[] = [];
         let groupsUploadedCount = 0;
-        groups.forEach((g: any) => {
+        
+        groupsWithScores.forEach((g: any) => {
             if (g.files && g.files.length > 0) {
                 groupsUploadedCount++;
+                const fileCount = g.files.length;
+
+                // --- COUNT FILES BASED ON ROLE ---
+                if (g.isPanelistGroup) {
+                    totalReviewFiles += fileCount;
+                } else {
+                    totalMenteeFiles += fileCount;
+                }
+                // --------------------------------
+
                 const groupFiles = g.files.map((f: any) => ({
                     ...f,
                     groupName: g.groupName,
@@ -209,7 +219,10 @@ export default function DashboardPage() {
           tasksDone: countDone,
           tasksOngoing: countOngoing,
           tasksNotStarted: countNotStarted,
-          groupsWithFiles: groupsUploadedCount
+          groupsWithFiles: groupsUploadedCount,
+          // --- SET NEW STATS ---
+          menteeFilesCount: totalMenteeFiles,
+          nonMenteeFilesCount: totalReviewFiles
         });
 
         // 6. Set Deliverables List
@@ -232,7 +245,7 @@ export default function DashboardPage() {
     loadData();
 
     return () => window.removeEventListener('auth-change', checkUser);
-  }, [currentUser]); // Depend on currentUser so counts update if user switches
+  }, [currentUser]); 
 
   const formatDate = (dateString: string) => {
     if (!dateString) return "";
@@ -412,7 +425,6 @@ export default function DashboardPage() {
                 </Link>
              </div>
 
-             {/* UPDATED: Reduced bottom padding (pb-6) and adjusted max-height */}
              <div className="flex-1 overflow-y-auto max-h-[550px] p-6 pt-2 space-y-2 custom-scrollbar">
                 {loading ? (
                   <div className="text-center py-8 text-slate-400 text-sm animate-pulse">Syncing calendar events...</div>
@@ -536,54 +548,71 @@ export default function DashboardPage() {
 
           {/* BOTTOM ROW: REPOSITORY */}
           <div className="md:col-span-3 bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-8 transition-colors">
-              <div className="md:w-1/3 border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-800 pb-6 md:pb-0 md:pr-6">
+              <div className="md:w-1/3 border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-800 pb-6 md:pb-0 md:pr-6 flex flex-col">
                 
-                {/* UPDATED: Wrapped in Link to make it clickable */}
-                <Link href="/files">
+                <Link href="/files" className="inline-block self-start">
                     <div className="h-12 w-12 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500 rounded-2xl flex items-center justify-center mb-4 cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors">
                       <FolderOpen className="w-6 h-6" />
                     </div>
                 </Link>
 
                 <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Files Repository</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Recent uploads from your thesis groups.</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Recent uploads from your thesis groups.</p>
                 
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-2xl font-black text-slate-800 dark:text-white">{stats.groupsWithFiles}</span>
                   <span className="text-xs font-medium text-slate-400">groups contributed</span>
                 </div>
-                <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mb-8">
                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${uploadPercentage}%` }}></div>
                 </div>
+
+                {/* --- NEW AUDIT SECTION (Counters) --- */}
+                <div className="mt-auto grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100 dark:border-indigo-500/10">
+                        <p className="text-[10px] font-bold uppercase text-indigo-400 tracking-widest mb-1">Mentee Files</p>
+                        <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{loading ? '-' : stats.menteeFilesCount}</p>
+                    </div>
+                    <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+                        <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-1">Review Files</p>
+                        <p className="text-2xl font-black text-slate-600 dark:text-slate-300">{loading ? '-' : stats.nonMenteeFilesCount}</p>
+                    </div>
+                </div>
+                {/* ------------------------------------ */}
               </div>
 
-              {/* ... keep the right side (recent files list) as is ... */}
+              <div className="bg-white rounded-2xl p-6 shadow-sm w-full h-full">
+                 <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Recent Uploads</h4>
+                    <Link href="/files" className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest hover:text-indigo-600">View All</Link>
+                 </div>
 
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
-                 {loading ? (
-                    <p className="text-xs text-slate-400">Loading files...</p>
-                 ) : recentFiles.length > 0 ? (
-                    recentFiles.map((file, idx) => (
-                       <div key={idx} className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl flex flex-col justify-between hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                          <div className="flex justify-between items-start mb-2">
-                             <div className="text-indigo-400">
-                                {file.url && (file.url.endsWith('.png') || file.url.endsWith('.jpg')) 
-                                  ? <ImageIcon size={20}/> 
-                                  : <FileText size={20}/>}
-                             </div>
-                             <span className="text-[9px] font-bold text-slate-400">{formatDate(file.uploadedAt)}</span>
-                          </div>
-                          <div>
-                             <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate mb-1">{file.name || "Untitled"}</p>
-                             <p className="text-[10px] text-indigo-500 font-bold truncate bg-indigo-50 dark:bg-indigo-900/30 inline-block px-2 py-0.5 rounded-md">
-                                {file.groupName}
-                             </p>
-                          </div>
-                       </div>
-                    ))
-                 ) : (
-                    <div className="col-span-3 flex items-center justify-center text-slate-400 text-sm">No recent files found.</div>
-                 )}
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                     {loading ? (
+                        <p className="text-xs text-slate-400">Loading files...</p>
+                     ) : recentFiles.length > 0 ? (
+                        recentFiles.map((file, idx) => (
+                           <div key={idx} className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl flex flex-col justify-between hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                              <div className="flex justify-between items-start mb-4">
+                                 <div className="text-indigo-400">
+                                    {file.url && (file.url.endsWith('.png') || file.url.endsWith('.jpg')) 
+                                      ? <ImageIcon size={20}/> 
+                                      : <FileText size={20}/>}
+                                 </div>
+                                 <span className="text-[9px] font-bold text-slate-400 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg">{formatDate(file.uploadedAt)}</span>
+                              </div>
+                              <div>
+                                 <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate mb-1" title={file.name}>{file.name || "Untitled"}</p>
+                                 <p className="text-[10px] text-indigo-500 font-bold truncate bg-indigo-50 dark:bg-indigo-900/30 inline-block px-2 py-0.5 rounded-md">
+                                    {file.groupName}
+                                 </p>
+                              </div>
+                           </div>
+                        ))
+                     ) : (
+                        <div className="col-span-3 flex items-center justify-center text-slate-400 text-sm border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl h-32">No recent files found.</div>
+                     )}
+                 </div>
               </div>
           </div>
 

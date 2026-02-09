@@ -43,7 +43,7 @@ export default function StudentMasterlist() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const groups = await getGroupsFromDB();
+        const groups = await getGroupsFromDB(currentUser);
         
         // Define keywords for the current user
         const myNameKeywords = [currentUser, "Pura", "Justine", "Jude"].filter(Boolean).map(n => n.toLowerCase());

@@ -3,10 +3,10 @@ import { connectToDB } from '../../../lib/mongoose';
 import Group from '@/models/Group'; 
 
 // ✅ 1. Define User Once (Global Constant)
-// We will use a "part" of the name for matching to be safer against typos.
 const CURRENT_USER_FULL = "Mr. Justine Jude C. Pura";
 const CURRENT_USER_NAME_ONLY = "Justine Jude"; // Used for fuzzy matching
 
+// GET: Fetch Groups with Filters
 export async function GET(req: Request) {
   try {
     await connectToDB();
@@ -14,8 +14,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const viewMode = searchParams.get('view'); 
     
-    // 🔍 REGEX: Matches "Justine Jude" (case insensitive) inside any string
-    // This handles "Mr. Justine Jude Pura", "Justine Jude", etc.
+    // 🔍 REGEX: Matches "Justine Jude" (case insensitive)
     const userRegex = { $regex: CURRENT_USER_NAME_ONLY, $options: "i" };
 
     let filter: any = {};
@@ -35,15 +34,10 @@ export async function GET(req: Request) {
 
       case 'mentoring':
         // 🟢 VIEW 2: MENTORING (Logic: "Not Panel")
-        // "If I am NOT the Chair AND NOT the Internal, I must be the Mentor."
-        // We use $and with $not to exclude groups where you appear in panel fields.
         filter = {
           $and: [
-            // Exclude groups where I am the Chair
             { "panelists.chair": { $not: userRegex } },
-            // Exclude groups where I am the Internal Panel
             { "panelists.internal": { $not: userRegex } },
-            // Optional: Exclude External too (if being external means you aren't mentor)
             { "panelists.external": { $not: userRegex } } 
           ]
         };
@@ -56,8 +50,9 @@ export async function GET(req: Request) {
         break;
     }
 
-    console.log(`🔍 Fetching View: [${viewMode}]`);
+    console.log(`🔍 Fetching View: [${viewMode || 'default'}]`);
 
+    // Sort by newest first so your new group appears at the top
     const groups = await Group.find(filter).sort({ createdAt: -1 });
 
     return NextResponse.json(groups, { status: 200 });
@@ -68,7 +63,7 @@ export async function GET(req: Request) {
   }
 }
 
-// POST: Register a new Group (KEPT EXACTLY AS IS)
+// POST: Register a new Group
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -76,11 +71,25 @@ export async function POST(req: Request) {
 
     console.log("📥 Receiving Registration Data:", body); 
 
+    // FIX: Handle 'section' (singular from frontend) vs 'sections' (plural in DB)
+    let sectionData = [];
+    if (body.sections) {
+        sectionData = Array.isArray(body.sections) ? body.sections : [body.sections];
+    } else if (body.section) {
+        sectionData = [body.section];
+    }
+
     const newGroup = await Group.create({
+      // Map 'name' from frontend to 'groupName' in DB
       groupName: body.groupName || body.name || "Untitled Group",
+      
+      // Map 'title' from frontend to 'thesisTitle' in DB
       thesisTitle: body.thesisTitle || body.title || "No Title Yet",
+      
       members: body.members || [], 
-      sections: Array.isArray(body.sections) ? body.sections : [body.sections], 
+      
+      // ✅ FIX: Correctly maps the section array
+      sections: sectionData, 
 
       advisers: {
         seAdviser: body.se2Adviser || body.adviser || "", 
@@ -90,6 +99,8 @@ export async function POST(req: Request) {
       consultationDay: body.consultationDay || "",
       consultationTime: body.consultationTime || "",
 
+      // NOTE: If you register a group here, Panelists are usually empty.
+      // This means they will NOT show up in 'view=panel' until you assign a panelist.
       panelists: {
         chair: body.panelChair || "",       
         internal: body.panelInternal || "", 

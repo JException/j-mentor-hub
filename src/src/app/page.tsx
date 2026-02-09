@@ -55,7 +55,10 @@ export default function DashboardPage() {
     tasksDone: 0,        
     tasksOngoing: 0,     
     tasksNotStarted: 0,
-    groupsWithFiles: 0 
+    groupsWithFiles: 0,
+    // --- NEW COUNTERS ---
+    menteeFilesCount: 0,
+    nonMenteeFilesCount: 0
   });
 
   const [loading, setLoading] = useState(true);
@@ -69,14 +72,6 @@ export default function DashboardPage() {
       document.documentElement.classList.add('dark');
     }
   }, []);
-
-  const toggleDarkMode = () => {
-    const newMode = !isDarkMode;
-    setIsDarkMode(newMode);
-    localStorage.setItem('darkMode', newMode.toString());
-    if (newMode) document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
-  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -145,12 +140,31 @@ export default function DashboardPage() {
         const totalExpected = groups.length * pastTasks.length;
         const countNotStarted = Math.max(0, totalExpected - (countDone + countOngoing));
 
-        // 5. Process Files
+        // 5. Process Files (UPDATED LOGIC)
         let allFiles: any[] = [];
         let groupsUploadedCount = 0;
+        
+        // Counters for roles
+        let menteeFilesTotal = 0;
+        let nonMenteeFilesTotal = 0;
+        const myNameKeywords = ["Dr. Cruz", "Pura", "Justine", "Jude"].map(n => n.toLowerCase());
+
         groups.forEach((g: any) => {
             if (g.files && g.files.length > 0) {
                 groupsUploadedCount++;
+                const fileCount = g.files.length;
+
+                // Determine Role for this group
+                const p = g.panelists || {};
+                const panelistString = `${p.chair || ''} ${p.internal || ''} ${p.external || ''}`.toLowerCase();
+                const isPanelist = myNameKeywords.some(keyword => panelistString.includes(keyword));
+
+                if (isPanelist) {
+                    nonMenteeFilesTotal += fileCount;
+                } else {
+                    menteeFilesTotal += fileCount;
+                }
+
                 const groupFiles = g.files.map((f: any) => ({
                     ...f,
                     groupName: g.groupName,
@@ -171,7 +185,9 @@ export default function DashboardPage() {
           tasksDone: countDone,
           tasksOngoing: countOngoing,
           tasksNotStarted: countNotStarted,
-          groupsWithFiles: groupsUploadedCount
+          groupsWithFiles: groupsUploadedCount,
+          menteeFilesCount: menteeFilesTotal,
+          nonMenteeFilesCount: nonMenteeFilesTotal
         });
 
         // 6. Set Deliverables List
@@ -452,9 +468,11 @@ export default function DashboardPage() {
 
           {/* REPOSITORY CARD */}
           <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col transition-colors">
-             <h3 className="font-bold text-slate-800 dark:text-white mb-1 flex items-center gap-2">
-               <FolderOpen className="w-5 h-5 text-indigo-500" /> Files Repository
-             </h3>
+             <div className="flex justify-between items-start mb-1">
+                <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                   <FolderOpen className="w-5 h-5 text-indigo-500" /> Files Repository
+                </h3>
+             </div>
              
              {/* Upload Stats */}
              <div className="mb-4">
@@ -462,8 +480,20 @@ export default function DashboardPage() {
                     <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Activity</span>
                     <span className="text-[10px] font-bold text-indigo-500 uppercase">{stats.groupsWithFiles} / {stats.totalGroups} Groups</span>
                  </div>
-                 <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                 <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mb-4">
                     <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${uploadPercentage}%` }}></div>
+                 </div>
+
+                 {/* NEW COUNTERS FOR MENTEE/PANEL */}
+                 <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-center border border-slate-100 dark:border-slate-700/50">
+                        <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Mentee Files</span>
+                        <span className="block text-xl font-black text-indigo-500">{loading ? "-" : stats.menteeFilesCount}</span>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-center border border-slate-100 dark:border-slate-700/50">
+                        <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Review Files</span>
+                        <span className="block text-xl font-black text-slate-600 dark:text-slate-300">{loading ? "-" : stats.nonMenteeFilesCount}</span>
+                    </div>
                  </div>
              </div>
 
@@ -489,7 +519,7 @@ export default function DashboardPage() {
                   ))
                ) : (
                   <div className="flex flex-col items-center justify-center h-20 text-slate-400">
-                     <span className="text-xs">No files uploaded yet</span>
+                      <span className="text-xs">No files uploaded yet</span>
                   </div>
                )}
              </div>

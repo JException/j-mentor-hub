@@ -1,15 +1,15 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   UploadCloud, FileText, CheckCircle, AlertCircle, 
   Loader2, ChevronRight, X, FolderOpen, Database, 
   BookOpen, PenTool, MapPin, Activity, HelpCircle,
-  GraduationCap, Users, ArrowLeft
+  GraduationCap, Users, ArrowLeft, Search, Clock
 } from 'lucide-react';
 import { getGroupsFromDB } from "@/app/actions"; 
 
-// ... [Keep your interfaces ScanResult, FileDoc, Group here] ...
+// --- Interfaces ---
 interface ScanResult {
   score: number;
   found: string[];
@@ -58,33 +58,99 @@ interface FileDoc {
     uploadDate: string;
     url: string; 
   }
-   
+    
 interface Group {
     _id: string;
     groupName: string;
     thesisTitle: string;
+    panelists?: {
+        chair?: string;
+        internal?: string;
+        external?: string;
+    };
     files?: FileDoc[]; 
 }
+
+// --- CONSTANTS ---
+// REPLACE THIS with the actual name/ID of the logged-in faculty member
+const CURRENT_USER = "Dr. Cruz"; 
+
+// --- Helper Functions ---
+const getReadabilityColor = (grade: number) => {
+  if (grade >= 12 && grade <= 16) return 'bg-green-500';
+  if (grade > 18) return 'bg-red-400';
+  return 'bg-orange-400';
+};
+
+const getReadabilityMessage = (grade: number) => {
+  if (grade < 12) return "Writing is too simple. Aim for academic depth.";
+  if (grade >= 12 && grade <= 16) return "Perfect academic complexity.";
+  return "Very dense. Consider shortening sentences.";
+};
+
+const formatUploadDate = (dateString: string) => {
+  if (!dateString) return '';
+  return new Date(dateString).toLocaleDateString(undefined, { 
+    month: 'short', day: 'numeric', year: 'numeric' 
+  });
+};
 
 export default function ThesisScanner() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+  const [animatedScore, setAnimatedScore] = useState(0);
+
   // Repository State
   const [isRepoOpen, setIsRepoOpen] = useState(false);
   const [repoGroups, setRepoGroups] = useState<Group[]>([]);
   const [loadingRepo, setLoadingRepo] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   
   // Repository Flow
   const [repoStep, setRepoStep] = useState<'role' | 'files'>('role');
   const [selectedRole, setSelectedRole] = useState<'mentee' | 'non-mentee' | null>(null);
+
+  // Animated Score Effect
+  useEffect(() => {
+    if (result && result.score > 0) {
+      let start = 0;
+      const end = result.score;
+      const duration = 1000; 
+      const incrementTime = duration / end;
+
+      const timer = setInterval(() => {
+        start += 1;
+        setAnimatedScore(start);
+        if (start === end) clearInterval(timer);
+      }, incrementTime);
+
+      return () => clearInterval(timer);
+    } else {
+      setAnimatedScore(0);
+    }
+  }, [result]);
 
   const scanFile = async (file: File) => {
     setLoading(true);
     setError(null);
     setResult(null);
     setIsRepoOpen(false); 
+
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+    const VALID_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    
+    if (!VALID_TYPES.includes(file.type) && !file.name.match(/\.(pdf|docx)$/i)) {
+        setError("Invalid file type. Please upload a PDF or DOCX.");
+        setLoading(false);
+        return;
+    }
+
+    if (file.size > MAX_SIZE) {
+        setError("File is too large (Max 10MB). Please compress it.");
+        setLoading(false);
+        return;
+    }
 
     try {
       const formData = new FormData();
@@ -115,42 +181,40 @@ export default function ThesisScanner() {
     }
   };
 
-  // FIX 1: Ensure absolute cleanup when opening
   const openRepository = () => {
     setIsRepoOpen(true);
     setRepoStep('role');
     setSelectedRole(null);
     setRepoGroups([]); 
+    setSearchTerm(""); 
     setError(null);
   };
 
-  // FIX 2: Debugging and stricter state handling
   const handleRoleSelect = async (role: 'mentee' | 'non-mentee') => {
-    // 1. Immediate UI Updates
     setSelectedRole(role);
     setRepoStep('files');
-    setRepoGroups([]); // Clear old data immediately
+    setSearchTerm(""); 
     setLoadingRepo(true);
     
     try {
-      console.log(`Fetching files for role: ${role}...`);
+      // Pass 'all' or an empty string to get everything, 
+      // so we can filter it ourselves using your logic below.
+      const rawData = await getGroupsFromDB('all'); 
       
-      // 2. Fetch Data
-      const data = await getGroupsFromDB(role); 
-      
-      console.log("Data received from DB:", data); // Check your console to see if this is filtered!
+      if (rawData && Array.isArray(rawData)) {
+        // Just process files, don't filter roles yet
+        const processedGroups = rawData.map((group) => ({ 
+            ...group, 
+            files: group.files || [] 
+        })).filter(group => group.files.length > 0);
 
-      // 3. Update State (Safety Check)
-      if (data && Array.isArray(data)) {
-        // Deep copy to prevent reference issues
-        setRepoGroups(JSON.parse(JSON.stringify(data)));
+        setRepoGroups(processedGroups);
       } else {
-        console.error("Invalid data format received:", data);
         setRepoGroups([]);
       }
     } catch (err) {
-      console.error("Failed to load repo", err);
-      setError("Failed to load repository files.");
+      console.error(err);
+      setError("Failed to load files.");
     } finally {
       setLoadingRepo(false);
     }
@@ -170,12 +234,56 @@ export default function ThesisScanner() {
     }
   };
 
-  // Helper to go back safely
   const handleBackToRoles = () => {
       setRepoStep('role');
-      setRepoGroups([]); // Clear files so they don't flash when returning
+      setRepoGroups([]); 
       setSelectedRole(null);
+      setSearchTerm("");
   };
+
+  // --- SEARCH LOGIC (Maintains Search Filter on top of Role Filter) ---
+  const filteredRepoGroups = useMemo(() => {
+    // 1. Define Keywords (Your Logic)
+    const currentUser = "Dr. Cruz"; // Replace with actual user variable
+    const myNameKeywords = [currentUser, "Pura", "Justine", "Jude"].filter(Boolean).map(n => n.toLowerCase());
+
+    return repoGroups.map(group => {
+        // --- A. Role Determination (Your Logic) ---
+        const p = group.panelists || {};
+        const panelistString = `${p.chair || ''} ${p.internal || ''} ${p.external || ''}`.toLowerCase();
+        
+        const isPanelist = myNameKeywords.some(keyword => panelistString.includes(keyword));
+        const isMentee = !isPanelist; // Default assumption: if not panelist, you are mentee
+
+        // --- B. Tab Filter (Your Logic) ---
+        // If tab is 'mentee' but calculated role is not Mentee, hide it
+        if (selectedRole === 'mentee' && !isMentee) return null;
+        
+        // If tab is 'non-mentee' (Panelist) but calculated role is not Panelist, hide it
+        if (selectedRole === 'non-mentee' && !isPanelist) return null;
+
+        // --- C. Search Filter (Your Logic + File Handling) ---
+        if (!searchTerm) return group; // If no search, return the valid group
+
+        const lowerTerm = searchTerm.toLowerCase();
+
+        // 1. Does Group Name or Title match?
+        const matchesGroup = group.groupName.toLowerCase().includes(lowerTerm) || 
+                             (group.thesisTitle || "").toLowerCase().includes(lowerTerm);
+
+        // 2. Do any Files match?
+        const matchingFiles = (group.files || []).filter(f => 
+            f.name.toLowerCase().includes(lowerTerm)
+        );
+
+        // Logic: If group matches, show all files. If only file matches, show group with filtered files.
+        if (matchesGroup) return group;
+        if (matchingFiles.length > 0) return { ...group, files: matchingFiles };
+
+        return null; // No search match
+    })
+    .filter((group): group is Group => group !== null); // Remove nulls
+  }, [repoGroups, searchTerm, selectedRole]);
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-8">
@@ -209,7 +317,7 @@ export default function ThesisScanner() {
       )}
 
       {error && !isRepoOpen && (
-        <div className="bg-red-50 text-red-600 p-4 rounded-xl flex items-center gap-3 border border-red-100">
+        <div className="bg-red-50 text-red-600 p-4 rounded-xl flex items-center gap-3 border border-red-100 animate-in slide-in-from-top-2">
           <AlertCircle size={24} />
           <p className="font-medium">{error}</p>
         </div>
@@ -227,7 +335,7 @@ export default function ThesisScanner() {
                <p className="text-slate-400 text-sm mt-1">{result.wordCount.toLocaleString()} words found</p>
             </div>
             <div className={`text-4xl font-black ${result.score === 100 ? 'text-green-500' : result.score > 50 ? 'text-blue-500' : 'text-orange-500'}`}>
-              {result.score}%
+              {animatedScore}%
             </div>
           </div>
 
@@ -254,20 +362,12 @@ export default function ThesisScanner() {
                         <div className="mb-1.5 flex-1">
                             <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                                 <div 
-                                    className={`h-full rounded-full transition-all duration-1000 ${
-                                        result.readability.gradeLevel >= 12 && result.readability.gradeLevel <= 16 
-                                        ? 'bg-green-500' 
-                                        : result.readability.gradeLevel > 18 
-                                        ? 'bg-red-400' 
-                                        : 'bg-orange-400'
-                                    }`}
+                                    className={`h-full rounded-full transition-all duration-1000 ${getReadabilityColor(result.readability.gradeLevel)}`}
                                     style={{ width: `${Math.min(100, (result.readability.gradeLevel / 20) * 100)}%` }}
                                 />
                             </div>
                             <p className="text-xs text-slate-400 mt-2">
-                                {result.readability.gradeLevel < 12 && "Writing is too simple. Aim for academic depth."}
-                                {result.readability.gradeLevel >= 12 && result.readability.gradeLevel <= 16 && "Perfect academic complexity."}
-                                {result.readability.gradeLevel > 16 && "Very dense. Consider shortening sentences."}
+                                {getReadabilityMessage(result.readability.gradeLevel)}
                             </p>
                         </div>
                     </div>
@@ -372,9 +472,7 @@ export default function ThesisScanner() {
                           </div>
                       ))}
                    </div>
-                   
                 </div>
-                
               )}
             </div>
 
@@ -524,7 +622,7 @@ export default function ThesisScanner() {
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <h3 className="font-bold text-slate-700 flex items-center gap-2">
                 <Database className="text-blue-600" size={20} /> 
-                {repoStep === 'role' ? "Who are you?" : `Selecting as: ${selectedRole}`}
+                {repoStep === 'role' ? "Mentee or not?" : `Selecting as: ${selectedRole}`}
               </h3>
               <button onClick={() => setIsRepoOpen(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors">
                 <X size={20} />
@@ -544,7 +642,7 @@ export default function ThesisScanner() {
                     <div className="bg-white p-4 rounded-full shadow-sm group-hover:scale-110 transition-transform">
                       <GraduationCap size={40} className="text-blue-600" />
                     </div>
-                    <span className="font-bold text-lg text-slate-700">I am a Mentee</span>
+                    <span className="font-bold text-lg text-slate-700">Mentee Files</span>
                     <span className="text-xs text-slate-500">Access my group's files</span>
                   </button>
 
@@ -555,8 +653,8 @@ export default function ThesisScanner() {
                     <div className="bg-white p-4 rounded-full shadow-sm group-hover:scale-110 transition-transform">
                       <Users size={40} className="text-slate-600" />
                     </div>
-                    <span className="font-bold text-lg text-slate-700">I am a Non-Mentee</span>
-                    <span className="text-xs text-slate-500">Browse public repository</span>
+                    <span className="font-bold text-lg text-slate-700">Non-mentee Files</span>
+                    <span className="text-xs text-slate-500">Browse files for paneling</span>
                   </button>
                 </div>
               )}
@@ -564,24 +662,54 @@ export default function ThesisScanner() {
               {/* STEP 2: FILE LIST */}
               {repoStep === 'files' && (
                 <div className="space-y-3">
-                  <button 
-                    onClick={handleBackToRoles}
-                    className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 mb-2"
-                  >
-                    <ArrowLeft size={12} /> Back to role selection
-                  </button>
+                  <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                    <button 
+                        onClick={handleBackToRoles}
+                        className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                    >
+                        <ArrowLeft size={12} /> Back to role selection
+                    </button>
+
+                    <div className="flex items-center gap-3">
+                         {/* Role Badge */}
+                        <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wider ${
+                            selectedRole === 'mentee' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'
+                        }`}>
+                            Viewing: {selectedRole}
+                        </span>
+
+                        {/* Search Bar */}
+                        <div className="relative">
+                            <input 
+                                type="text" 
+                                placeholder="Filter files..." 
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 w-40 md:w-48"
+                            />
+                            <Search size={14} className="absolute left-2.5 top-2 text-slate-400" />
+                        </div>
+                    </div>
+                  </div>
 
                   {loadingRepo ? (
                     <div className="py-12 flex flex-col items-center justify-center gap-3">
-                         <Loader2 className="animate-spin text-blue-500" size={32} />
-                         <span className="text-sm text-slate-400">Loading {selectedRole} files...</span>
+                          <Loader2 className="animate-spin text-blue-500" size={32} />
+                          <span className="text-sm text-slate-400">Loading {selectedRole} files...</span>
                     </div>
-                  ) : repoGroups.length === 0 ? (
-                      <p className="text-center text-slate-400 py-10">
-                        {error ? error : `No files found for ${selectedRole}.`}
-                      </p>
+                  ) : filteredRepoGroups.length === 0 ? (
+                      <div className="text-center text-slate-400 py-10">
+                        {error ? (
+                           <span className="text-red-500">{error}</span>
+                        ) : (
+                           <div className="flex flex-col items-center gap-2">
+                             <FolderOpen size={32} className="opacity-20" />
+                             <span>{searchTerm ? "No matching files found." : `No files found for ${selectedRole}.`}</span>
+                           </div>
+                        )}
+                      </div>
                   ) : (
-                    repoGroups.map(group => {
+                    filteredRepoGroups.map(group => {
                         // Safe check to prevent rendering empty groups
                         if(!group.files || group.files.length === 0) return null;
                         
@@ -594,11 +722,18 @@ export default function ThesisScanner() {
                              <div className="divide-y divide-slate-100">
                                 {group.files.slice().reverse().map(file => (
                                   <button key={file.fileId} onClick={() => handleRepoSelect(file.url, file.name)} className="w-full text-left px-4 py-3 hover:bg-blue-50 hover:text-blue-700 transition-colors flex items-center justify-between group">
-                                    <div className="flex items-center gap-3">
-                                      <FileText size={18} className="text-slate-400 group-hover:text-blue-500" />
-                                      <span className="text-sm font-medium text-slate-700 group-hover:text-blue-700 truncate max-w-[250px] md:max-w-md">{file.name}</span>
+                                    <div className="flex items-center gap-3 overflow-hidden">
+                                      <FileText size={18} className="text-slate-400 group-hover:text-blue-500 flex-shrink-0" />
+                                      <div className="flex flex-col items-start overflow-hidden">
+                                          <span className="text-sm font-medium text-slate-700 group-hover:text-blue-700 truncate w-full">{file.name}</span>
+                                          {file.uploadDate && (
+                                              <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                                                  <Clock size={10} /> {formatUploadDate(file.uploadDate)}
+                                              </span>
+                                          )}
+                                      </div>
                                     </div>
-                                    <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-400" />
+                                    <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-400 flex-shrink-0 ml-2" />
                                   </button>
                                 ))}
                              </div>

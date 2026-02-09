@@ -1,6 +1,6 @@
 import mongoose, { Schema, model, models } from 'mongoose';
 
-// 1. Define the File Schema
+// 1. Define the File Schema (Sub-document)
 const FileSchema = new Schema({
   fileId: { type: String, required: true },
   name: { type: String, required: true },
@@ -9,7 +9,7 @@ const FileSchema = new Schema({
   uploadDate: { type: Date, default: Date.now }
 });
 
-// 2. Update Group Schema
+// 2. Define the Group Schema
 const GroupSchema = new Schema({
   groupName: { 
     type: String, 
@@ -28,47 +28,65 @@ const GroupSchema = new Schema({
     default: ""
   },
   
-  // --- MISSING FIELDS ADDED BELOW ---
-
-  // Sections (e.g., ["TN31", "TN32"])
+  // --- SECTIONS & ADVISERS ---
   sections: {
     type: [String],
     default: []
   },
-
-  // Advisers (SE II and PM Professors)
   advisers: {
     seAdviser: { type: String, default: "" },
     pmAdviser: { type: String, default: "" }
   },
 
-  // Consultation Schedule
+  // --- PANELISTS (Crucial for your Panel Board) ---
+  panelists: {
+    chair: { type: String, default: "" },
+    internal: { type: String, default: "" },
+    external: { type: String, default: "" }
+  },
+
+  // --- SCHEDULES ---
   consultationSchedule: {
     day: { type: String, default: "" },
     time: { type: String, default: "" }
   },
 
-  // ----------------------------------
-
+  // --- FILES ---
   files: { 
     type: [FileSchema], 
     default: [] 
   },
 
-  mockDefenseDate: { type: Date },
-  mockDefenseMode: { type: String, enum: ['F2F', 'Online'] },
-  mockDefenseGrades: [
-    {
-      panelistName: String,
-      presentationScore: Number,
-      paperScore: Number, 
-      comment: String,
-      timestamp: { type: Date, default: Date.now }
+  // --- DEFENSE DETAILS ---
+  defense: {
+    date: { type: String },
+    time: { type: String },
+    status: { 
+      type: String, 
+      // ✅ Included 'Evaluated' here so your update works
+      enum: ['Pending', 'Approved', 'Evaluated', 'Completed'], 
+      default: 'Pending' 
     }
-  ]
-  
+  },
+
+  // --- MOCK DEFENSE (Separate Object) ---
+  mockDefense: {
+    date: { type: Date },
+    mode: { type: String, enum: ['F2F', 'Online'] },
+    grades: [
+      {
+        panelistName: String,
+        presentationScore: Number,
+        paperScore: Number, 
+        comment: String,
+        timestamp: { type: Date, default: Date.now }
+      }
+    ]
+  }
+
 }, { timestamps: true });
 
+// Prevent model overwrite in hot-reload (Next.js specific)
 const Group = models.Group || model('Group', GroupSchema);
 
 export default Group;

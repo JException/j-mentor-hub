@@ -76,7 +76,7 @@ export default function FilesPage() {
   useEffect(() => {
     const fetchGroups = async () => {
       try {
-        const data = await getGroupsFromDB();
+        const data = await getGroupsFromDB(currentUser);
         if (data) setGroups(JSON.parse(JSON.stringify(data)));
         
         // Simulated Storage Stats
