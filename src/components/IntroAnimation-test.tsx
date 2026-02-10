@@ -59,7 +59,7 @@ export default function IntroAnimation({ onFinish }: IntroAnimationProps) {
             className="text-center"
           >
             <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tighter">
-              Thesis Mentoring <span className="text-blue-500"> Hub 4.0</span>
+              Thesis Mentoring <span className="text-blue-500"> Hub 5.0</span>
             </h1>
             <motion.div 
               initial={{ width: 0 }}

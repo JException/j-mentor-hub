@@ -130,7 +130,7 @@ export async function togglePinGroup(groupId: string, currentStatus: boolean) {
   }
 }
 
-export async function getGroupsFromDB() {
+export async function getGroupsFromDB(currentUser?: string) {
   try {
     await dbConnect();
 
