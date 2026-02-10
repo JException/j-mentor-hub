@@ -307,10 +307,10 @@ export default function PanelDashboard() {
                 </div>
 
                 <div className="flex-1 mb-6">
-                  <h3 className="font-bold text-xl text-slate-800 mb-2 group-hover:text-blue-600 transition-colors leading-tight">
+                  <h3 className="font-bold text-xl text-slate-800 line-clamp-2 mb-2 group-hover:text-blue-600 transition-colors leading-tight">
                     {group.name}
                   </h3>
-                  <p className="text-xs text-slate-500 leading-relaxed line-clamp-2 mb-4 font-medium">
+                  <p className="text-xs text-slate-500 leading-relaxed mb-4 font-medium">
                     {group.title}
                   </p>
                   <div className="flex flex-wrap gap-1.5">

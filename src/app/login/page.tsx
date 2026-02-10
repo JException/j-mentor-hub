@@ -18,6 +18,7 @@ import { recordAuditLog, setAuthCookie } from "../actions";
 const VAULT_KEYS: Record<string, string> = {
   "jjcp1234": "Sir Pura",         
   "mockdefense1": "Panelist",
+  "wilempogi": "Wilem",
 }; 
 
 const MAX_ATTEMPTS = 5;

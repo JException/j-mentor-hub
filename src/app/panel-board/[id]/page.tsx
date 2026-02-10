@@ -336,7 +336,7 @@ useEffect(() => {
           </Link>
           <div>
             <h1 className="font-bold text-xl text-slate-800 tracking-tight">{group.groupName}</h1>
-            <p className="text-xs text-slate-500 font-medium max-w-md truncate">{group.thesisTitle}</p>
+            <p className="text-xs text-slate-500 font-medium max-w-md">{group.thesisTitle}</p>
           </div>
         </div>
 
