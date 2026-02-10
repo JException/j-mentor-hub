@@ -2,7 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, ArrowUpDown, Search, UserCheck, 
-  ChevronRight, ArrowRight, CheckCircle2, Circle
+  ChevronRight, ArrowRight, CheckCircle2, Circle,
+  CrossIcon,
+  PanelBottomCloseIcon
 } from 'lucide-react';
 import Link from 'next/link';
 import { getGroupsFromDB } from "@/app/actions";
@@ -273,8 +275,8 @@ export default function StudentMasterlist() {
                                 <CheckCircle2 size={10} /> Mentee
                             </span>
                         ) : (
-                            <span className="inline-flex items-center justify-center px-2 py-1 rounded-md bg-slate-50 border border-slate-200 text-slate-400 text-[10px] font-bold uppercase tracking-tight">
-                                Other
+                            <span className="inline-flex items-center justify-center px-2 py-1 rounded-md bg-red-50 border border-slate-200 text-slate-800 text-[8px] font-bold uppercase tracking-tight">
+                                <PanelBottomCloseIcon size={9} /> Non-mentee
                             </span>
                         )}
                     </td>

@@ -5,7 +5,7 @@ import {
   UploadCloud, FileText, CheckCircle, AlertCircle, 
   Loader2, ChevronRight, X, FolderOpen, Database, 
   BookOpen, PenTool, MapPin, Activity, HelpCircle,
-  GraduationCap, Users, ArrowLeft, Search, Clock
+  GraduationCap, Users, ArrowLeft, Search, Clock, Download
 } from 'lucide-react';
 import { getGroupsFromDB } from "@/app/actions"; 
 
@@ -57,7 +57,7 @@ interface FileDoc {
     type: string;
     uploadDate: string;
     url: string; 
-  }
+}
     
 interface Group {
     _id: string;
@@ -72,7 +72,7 @@ interface Group {
 }
 
 // --- CONSTANTS ---
-// REPLACE THIS with the actual name/ID of the logged-in faculty member
+// This constant controls the Role Filtering Logic
 const CURRENT_USER = "Dr. Cruz"; 
 
 // --- Helper Functions ---
@@ -190,22 +190,28 @@ export default function ThesisScanner() {
     setError(null);
   };
 
+  // --- UPDATED LOADING LOGIC ---
   const handleRoleSelect = async (role: 'mentee' | 'non-mentee') => {
     setSelectedRole(role);
     setRepoStep('files');
     setSearchTerm(""); 
     setLoadingRepo(true);
-    
+    setRepoGroups([]); // Clear previous data to prevent stale state
+
     try {
-      // Pass 'all' or an empty string to get everything, 
-      // so we can filter it ourselves using your logic below.
+      // We fetch 'all' groups and filter on the client side based on the logic below.
+      // This allows the UI to switch roles efficiently if we cache the data later.
       const rawData = await getGroupsFromDB('all'); 
       
       if (rawData && Array.isArray(rawData)) {
-        // Just process files, don't filter roles yet
+        // Pre-processing:
+        // 1. Ensure 'files' array exists
+        // 2. Ensure 'panelists' object exists (to prevent crashes in filtering)
+        // 3. Remove groups that have no files
         const processedGroups = rawData.map((group) => ({ 
             ...group, 
-            files: group.files || [] 
+            files: group.files || [],
+            panelists: group.panelists || { chair: '', internal: '', external: '' }
         })).filter(group => group.files.length > 0);
 
         setRepoGroups(processedGroups);
@@ -214,7 +220,7 @@ export default function ThesisScanner() {
       }
     } catch (err) {
       console.error(err);
-      setError("Failed to load files.");
+      setError("Failed to load files from database.");
     } finally {
       setLoadingRepo(false);
     }
@@ -241,48 +247,48 @@ export default function ThesisScanner() {
       setSearchTerm("");
   };
 
-  // --- SEARCH LOGIC (Maintains Search Filter on top of Role Filter) ---
+  // --- UPDATED SEARCH & FILTER LOGIC ---
   const filteredRepoGroups = useMemo(() => {
-    // 1. Define Keywords (Your Logic)
-    const currentUser = "Dr. Cruz"; // Replace with actual user variable
-    const myNameKeywords = [currentUser, "Pura", "Justine", "Jude"].filter(Boolean).map(n => n.toLowerCase());
+    // We strictly use the CURRENT_USER constant for filtering
+    const currentUserLower = CURRENT_USER.toLowerCase();
+    const lowerTerm = searchTerm.toLowerCase();
 
     return repoGroups.map(group => {
-        // --- A. Role Determination (Your Logic) ---
+        // --- A. Role Determination ---
+        // Combine all panelist names into one searchable string
         const p = group.panelists || {};
         const panelistString = `${p.chair || ''} ${p.internal || ''} ${p.external || ''}`.toLowerCase();
         
-        const isPanelist = myNameKeywords.some(keyword => panelistString.includes(keyword));
-        const isMentee = !isPanelist; // Default assumption: if not panelist, you are mentee
+        // If the current user is found in the panelist string, they are a Panelist.
+        // If NOT found, they are assumed to be a Mentee (Adviser/Student context).
+        const isPanelist = panelistString.includes(currentUserLower);
 
-        // --- B. Tab Filter (Your Logic) ---
-        // If tab is 'mentee' but calculated role is not Mentee, hide it
-        if (selectedRole === 'mentee' && !isMentee) return null;
+        // --- B. Tab Filter ---
+        // 1. User clicked "Mentee Files" -> Show groups where user is NOT a panelist
+        if (selectedRole === 'mentee' && isPanelist) return null;
         
-        // If tab is 'non-mentee' (Panelist) but calculated role is not Panelist, hide it
+        // 2. User clicked "Non-Mentee Files" -> Show groups where user IS a panelist
         if (selectedRole === 'non-mentee' && !isPanelist) return null;
 
-        // --- C. Search Filter (Your Logic + File Handling) ---
-        if (!searchTerm) return group; // If no search, return the valid group
+        // --- C. Search Filter ---
+        if (!searchTerm) return group; // No search term, return valid group
 
-        const lowerTerm = searchTerm.toLowerCase();
-
-        // 1. Does Group Name or Title match?
+        // Check Group Name or Thesis Title
         const matchesGroup = group.groupName.toLowerCase().includes(lowerTerm) || 
                              (group.thesisTitle || "").toLowerCase().includes(lowerTerm);
 
-        // 2. Do any Files match?
+        // Check specific file names
         const matchingFiles = (group.files || []).filter(f => 
             f.name.toLowerCase().includes(lowerTerm)
         );
 
-        // Logic: If group matches, show all files. If only file matches, show group with filtered files.
+        // If group matches, return full group. If only files match, return group with filtered files.
         if (matchesGroup) return group;
         if (matchingFiles.length > 0) return { ...group, files: matchingFiles };
 
-        return null; // No search match
+        return null; // No match found
     })
-    .filter((group): group is Group => group !== null); // Remove nulls
+    .filter((group): group is Group => group !== null); // Remove null entries
   }, [repoGroups, searchTerm, selectedRole]);
 
   return (
@@ -671,7 +677,7 @@ export default function ThesisScanner() {
                     </button>
 
                     <div className="flex items-center gap-3">
-                         {/* Role Badge */}
+                          {/* Role Badge */}
                         <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wider ${
                             selectedRole === 'mentee' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'
                         }`}>
@@ -698,51 +704,45 @@ export default function ThesisScanner() {
                           <span className="text-sm text-slate-400">Loading {selectedRole} files...</span>
                     </div>
                   ) : filteredRepoGroups.length === 0 ? (
-                      <div className="text-center text-slate-400 py-10">
-                        {error ? (
-                           <span className="text-red-500">{error}</span>
-                        ) : (
-                           <div className="flex flex-col items-center gap-2">
-                             <FolderOpen size={32} className="opacity-20" />
-                             <span>{searchTerm ? "No matching files found." : `No files found for ${selectedRole}.`}</span>
-                           </div>
-                        )}
+                      <div className="text-center py-12 text-slate-400">
+                          <FolderOpen size={48} className="mx-auto mb-2 opacity-20" />
+                          <p>No files found for this category.</p>
                       </div>
                   ) : (
-                    filteredRepoGroups.map(group => {
-                        // Safe check to prevent rendering empty groups
-                        if(!group.files || group.files.length === 0) return null;
-                        
-                        return (
-                          <div key={group._id} className="border border-slate-200 rounded-xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-                             <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 flex items-center justify-between">
-                                <span className="text-xs font-bold uppercase text-slate-500 tracking-wider">{group.groupName}</span>
-                                <span className="text-xs text-slate-400 font-mono truncate max-w-[200px]">{group.thesisTitle}</span>
-                             </div>
-                             <div className="divide-y divide-slate-100">
-                                {group.files.slice().reverse().map(file => (
-                                  <button key={file.fileId} onClick={() => handleRepoSelect(file.url, file.name)} className="w-full text-left px-4 py-3 hover:bg-blue-50 hover:text-blue-700 transition-colors flex items-center justify-between group">
-                                    <div className="flex items-center gap-3 overflow-hidden">
-                                      <FileText size={18} className="text-slate-400 group-hover:text-blue-500 flex-shrink-0" />
-                                      <div className="flex flex-col items-start overflow-hidden">
-                                          <span className="text-sm font-medium text-slate-700 group-hover:text-blue-700 truncate w-full">{file.name}</span>
-                                          {file.uploadDate && (
-                                              <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                                                  <Clock size={10} /> {formatUploadDate(file.uploadDate)}
-                                              </span>
-                                          )}
-                                      </div>
-                                    </div>
-                                    <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-400 flex-shrink-0 ml-2" />
-                                  </button>
-                                ))}
-                             </div>
-                          </div>
-                        );
-                    })
-                  )}
-                  {!loadingRepo && repoGroups.length > 0 && (
-                      <div className="p-3 bg-slate-50 text-center text-xs text-slate-400 border-t border-slate-100 mt-4 rounded-lg">Select a file to automatically scan it</div>
+                      <div className="space-y-4">
+                          {filteredRepoGroups.map((group) => (
+                              <div key={group._id} className="border border-slate-200 rounded-xl overflow-hidden">
+                                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 flex items-center justify-between">
+                                      <span className="font-bold text-slate-700 text-sm">{group.groupName}</span>
+                                      <span className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">
+                                          {(group.files || []).length} Files
+                                      </span>
+                                  </div>
+                                  <div className="divide-y divide-slate-100">
+                                      {(group.files || []).map((file) => (
+                                          <button 
+                                              key={file.fileId} 
+                                              onClick={() => handleRepoSelect(file.url, file.name)}
+                                              className="w-full text-left p-3 hover:bg-blue-50 flex items-center justify-between group transition-colors"
+                                          >
+                                              <div className="flex items-center gap-3">
+                                                  <div className="bg-white p-2 rounded-lg border border-slate-100 text-slate-400 group-hover:text-blue-500 group-hover:border-blue-200 transition-colors">
+                                                      <FileText size={16} />
+                                                  </div>
+                                                  <div>
+                                                      <p className="text-sm font-medium text-slate-700 group-hover:text-blue-700">{file.name}</p>
+                                                      <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                                                          <Clock size={10} /> {formatUploadDate(file.uploadDate)}
+                                                      </div>
+                                                  </div>
+                                              </div>
+                                              <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-400" />
+                                          </button>
+                                      ))}
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
                   )}
                 </div>
               )}
@@ -750,7 +750,6 @@ export default function ThesisScanner() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

@@ -46,7 +46,7 @@ export default function StudentMasterlist() {
                 last = parts[0].trim();
                 first = parts.slice(1).join(',').trim();
               } else {
-                // Handle "Adrian Dominic T. Aldave Jr." format
+        
                 const nameParts = fullName.trim().split(/\s+/);
                 const lastIndex = nameParts.length - 1;
                 const potentialSuffix = nameParts[lastIndex]?.toLowerCase().replace('.', '');

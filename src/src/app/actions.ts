@@ -133,7 +133,7 @@ export async function getGroupsFromDB(currentUser?: string) {
       createdAt: group.createdAt ? new Date(group.createdAt).toISOString() : null,
       updatedAt: group.updatedAt ? new Date(group.updatedAt).toISOString() : null,
       mockDefenseDate: group.mockDefenseDate ? new Date(group.mockDefenseDate).toISOString() : null,
-
+      evaluations: group.evaluations || [],
       // 5. Handle Files
       files: (group.files || []).map((file: any) => {
         if (typeof file === 'string') {
@@ -555,4 +555,68 @@ export async function clearAuditLogs() {
 
 function getClientIp() {
   throw new Error("Function not implemented.");
+}
+// --- PASTE THIS AT THE BOTTOM OF src/app/actions.ts ---
+
+export async function saveGroupEvaluation(data: any) {
+  try {
+    await dbConnect();
+    
+    if (!data.groupId || !data.evaluator) {
+      return { success: false, error: "Missing Group ID or Evaluator Name" };
+    }
+
+    console.log("💾 Saving Evaluation for:", data.groupId, "by", data.evaluator);
+
+    // 1. Construct the Evaluation Object
+    // we ensure 'individual' is an object and 'comments' is a string
+    const newEvaluation = {
+      evaluator: data.evaluator,
+      scores: {
+        paper: Number(data.scores.paper) || 0,
+        presentation: Number(data.scores.presentation) || 0,
+        individual: data.scores.individual || {} 
+      },
+      grandTotal: Number(data.scores.grandTotal || data.grandTotal || 0),
+      comments: data.comments || "", // ✅ FIX: Must be a String, not []
+      timestamp: new Date().toISOString()
+    };
+
+    // 2. Remove any existing evaluation by this person (Upsert Logic)
+    // This ensures we don't get duplicates if they click save twice
+    await Group.findByIdAndUpdate(data.groupId, {
+      $pull: { 
+        evaluations: { evaluator: data.evaluator } 
+      }
+    });
+
+    // 3. Add the new evaluation
+    const updatedGroup = await Group.findByIdAndUpdate(
+      data.groupId,
+      { 
+        $push: { evaluations: newEvaluation } 
+      },
+      { new: true }
+    );
+
+    if (!updatedGroup) {
+      throw new Error("Group not found");
+    }
+
+    // 4. Record Audit Log
+    await recordAuditLog(
+      "Panel Board", 
+      "GRADE", 
+      `Panelist ${data.evaluator} saved an evaluation`,
+      { groupId: data.groupId, totalScore: newEvaluation.grandTotal }
+    );
+
+    revalidatePath(`/panel-board/${data.groupId}`);
+    
+    return { success: true };
+
+  } catch (error: any) {
+    console.error("❌ Save Evaluation Error:", error);
+    return { success: false, error: error.message || "Database save failed" };
+  }
 }

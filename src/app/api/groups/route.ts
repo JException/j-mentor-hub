@@ -64,14 +64,15 @@ export async function GET(req: Request) {
 }
 
 // POST: Register a new Group
+// POST: Register a new Group
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     await connectToDB();
 
     console.log("📥 Receiving Registration Data:", body); 
-
-    // FIX: Handle 'section' (singular from frontend) vs 'sections' (plural in DB)
+    
+    // 1. Handle Sections (Array vs String)
     let sectionData = [];
     if (body.sections) {
         sectionData = Array.isArray(body.sections) ? body.sections : [body.sections];
@@ -79,47 +80,56 @@ export async function POST(req: Request) {
         sectionData = [body.section];
     }
 
+    // 2. Handle Panelists (Check Nested object OR Flat fields)
+    const panelChair = body.panelists?.chair || body.panelChair || "";
+    const panelInternal = body.panelists?.internal || body.panelInternal || "";
+    const panelExternal = body.panelists?.external || body.panelExternal || "";
+
+    // 3. Handle Defense (Check Nested object OR Flat fields)
+    const defenseDate = body.defense?.date || body.defenseDate || "";
+    const defenseTime = body.defense?.time || body.defenseTime || "";
+    const defenseStatus = body.defense?.status || body.status || "Pending";
+
+    console.log("1. Incoming Body:", body);
     const newGroup = await Group.create({
-      // Map 'name' from frontend to 'groupName' in DB
+      // Map 'name' -> 'groupName'
       groupName: body.groupName || body.name || "Untitled Group",
       
-      // Map 'title' from frontend to 'thesisTitle' in DB
+      // Map 'title' -> 'thesisTitle'
       thesisTitle: body.thesisTitle || body.title || "No Title Yet",
       
       members: body.members || [], 
-      
-      // ✅ FIX: Correctly maps the section array
       sections: sectionData, 
 
       advisers: {
-        seAdviser: body.se2Adviser || body.adviser || "", 
-        pmAdviser: body.pmAdviser || "" 
+        // Check nested advisers object OR flat adviser field
+        seAdviser: body.advisers?.seAdviser || body.se2Adviser || body.adviser || "", 
+        pmAdviser: body.advisers?.pmAdviser || body.pmAdviser || "" 
       },
       
-      consultationDay: body.consultationDay || "",
-      consultationTime: body.consultationTime || "",
+      // Consultation (if used)
+      consultationSchedule: {
+        day: body.consultationDay || "",
+        time: body.consultationTime || ""
+      },
 
-      // NOTE: If you register a group here, Panelists are usually empty.
-      // This means they will NOT show up in 'view=panel' until you assign a panelist.
       panelists: {
-        chair: body.panelChair || "",       
-        internal: body.panelInternal || "", 
-        external: body.panelExternal || ""  
+        chair: panelChair,      
+        internal: panelInternal, 
+        external: panelExternal  
       },
 
+      // 👇 THIS FIXES YOUR ISSUE
       defense: { 
-        date: body.defenseDate || "",
-        time: body.defenseTime || "",
-        status: 'Pending',
-        evaluations: []
+        date: defenseDate,
+        time: defenseTime,
+        status: defenseStatus
       },
-
-      finalDefense: {
-        date: body.finalDefenseDate || "",
-        time: body.finalDefenseTime || "",
-      },
+      
+      // Initialize empty evaluations
+      evaluations: []
     });
-
+    console.log("2. Saved to DB:", newGroup);
     console.log("✅ Group Saved Successfully:", newGroup._id);
     return NextResponse.json(newGroup, { status: 201 });
 

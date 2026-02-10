@@ -113,13 +113,15 @@ export default function FilesPage() {
       // We explicitly cast the result to our expected type
       const result = await addFileToGroup(targetId, fileUrl) as UploadResponse;
 
-      if (result.success && result.file) {
+      if (result && result.success && result.file) {
         const newFileDoc = result.file;
         
         // Optimistically update the UI
         setGroups(prev => prev.map(g => {
             if(g._id === targetId) {
-                const updatedFiles = [...(g.files || []), newFileDoc];
+                // Safely handle if g.files is undefined or not an array
+                const currentFiles = Array.isArray(g.files) ? g.files : [];
+                const updatedFiles = [...currentFiles, newFileDoc];
                 return { ...g, files: updatedFiles };
             }
             return g;
@@ -133,7 +135,8 @@ export default function FilesPage() {
         
         alert("✅ Upload Successful!");
       } else {
-        throw new Error(result.error || "Database save failed"); 
+        // Fallback error message if result.error is missing
+        throw new Error(result?.error || "Database save failed (Unknown Error)"); 
       }
 
     } catch (error: any) {
@@ -209,8 +212,8 @@ export default function FilesPage() {
           filteredGroups.map(group => {
             const isExpanded = expandedGroupId === group._id;
             // Create a reversed copy for display so newest files are first (optional)
-            // Note: If you want oldest first, remove .reverse()
-            const files = [...(group.files || [])].reverse(); 
+            // Safely handle if group.files is undefined
+            const files = Array.isArray(group.files) ? [...group.files].reverse() : []; 
             const currentFile = files.find(f => f.fileId === activeFileId);
 
             return (

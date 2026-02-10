@@ -618,3 +618,36 @@ export async function setAuthCookie(username: string) {
     maxAge: 60 * 60 * 24
   });
 }
+
+export async function saveGroupEvaluation(data: any) {
+  await dbConnect();
+
+  // 1. Check if this evaluator already has an entry in the array
+  const group = await Group.findById(data.groupId);
+  const existingIndex = group.evaluations.findIndex((e: any) => e.evaluator === data.evaluator);
+
+  if (existingIndex > -1) {
+    // UPDATE EXISTING ENTRY IN ARRAY
+    group.evaluations[existingIndex] = {
+      evaluator: data.evaluator,
+      scores: data.scores,
+      comments: data.comments,
+      timestamp: new Date().toISOString(),
+      status: "COMPLETED"
+    };
+  } else {
+    // PUSH NEW ENTRY TO ARRAY
+    group.evaluations.push({
+      evaluator: data.evaluator,
+      scores: data.scores,
+      comments: data.comments,
+      timestamp: new Date().toISOString(),
+      status: "COMPLETED"
+    });
+  }
+
+  // Save the parent document
+  await group.save({ validateBeforeSave: false });
+  
+  return { success: true };
+}

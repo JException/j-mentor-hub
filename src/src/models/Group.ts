@@ -9,36 +9,24 @@ const FileSchema = new Schema({
   uploadDate: { type: Date, default: Date.now }
 });
 
-// 2. Define the Group Schema
+// 2. Define the Main Group Schema
 const GroupSchema = new Schema({
   groupName: { 
     type: String, 
     required: [true, "Group name is required"] 
   },
-  thesisTitle: { 
-    type: String, 
-    default: "" 
-  },
-  members: { 
-    type: [String], 
-    default: [] 
-  },
-  projectManager: {
-    type: String,
-    default: ""
-  },
+  thesisTitle: { type: String, default: "" },
+  members: { type: [String], default: [] },
+  projectManager: { type: String, default: "" },
   
   // --- SECTIONS & ADVISERS ---
-  sections: {
-    type: [String],
-    default: []
-  },
+  sections: { type: [String], default: [] },
   advisers: {
     seAdviser: { type: String, default: "" },
     pmAdviser: { type: String, default: "" }
   },
 
-  // --- PANELISTS (Crucial for your Panel Board) ---
+  // --- PANELISTS ---
   panelists: {
     chair: { type: String, default: "" },
     internal: { type: String, default: "" },
@@ -57,19 +45,33 @@ const GroupSchema = new Schema({
     default: [] 
   },
 
-  // --- DEFENSE DETAILS ---
+  // --- EVALUATIONS ---
+  evaluations: [
+    {
+      evaluator: { type: String },
+      scores: {
+        paper: { type: Number, default: 0 },
+        presentation: { type: Number, default: 0 },
+        individual: { type: mongoose.Schema.Types.Mixed, default: {} } 
+      },
+      grandTotal: { type: Number, default: 0 },
+      comments: { type: String, default: "" },
+      timestamp: { type: String }
+    }
+  ],
+
+  // --- DEFENSE DETAILS (✅ Fixed!) ---
   defense: {
     date: { type: String },
     time: { type: String },
     status: { 
       type: String, 
-      // ✅ Included 'Evaluated' here so your update works
       enum: ['Pending', 'Approved', 'Evaluated', 'Completed'], 
       default: 'Pending' 
     }
   },
 
-  // --- MOCK DEFENSE (Separate Object) ---
+  // --- MOCK DEFENSE ---
   mockDefense: {
     date: { type: Date },
     mode: { type: String, enum: ['F2F', 'Online'] },
@@ -82,11 +84,13 @@ const GroupSchema = new Schema({
         timestamp: { type: Date, default: Date.now }
       }
     ]
-  }
+  },
+
+  isPinned: { type: Boolean, default: false }
 
 }, { timestamps: true });
 
-// Prevent model overwrite in hot-reload (Next.js specific)
+// Prevent model overwrite in hot-reload
 const Group = models.Group || model('Group', GroupSchema);
 
 export default Group;

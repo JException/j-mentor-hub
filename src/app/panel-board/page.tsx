@@ -143,18 +143,29 @@ export default function PanelDashboard() {
    const internalPanelist = editingGroup ? formData.panelInternal : (formData.panelInternal || CURRENT_USER_NAME);
 
    const payload = {
-     name: formData.name,
-     title: formData.title,
-     section: formData.section,
-     adviser: formData.adviser,
-     defenseDate: formData.defenseDate,
-     defenseTime: formData.defenseTime,
-     status: formData.status, // ✅ Sending status update
-     members: membersList,
-     panelChair: formData.panelChair,
-     panelInternal: internalPanelist, 
-     panelExternal: formData.panelExternal
-   };
+  groupName: formData.name, // Ensure this matches Schema (groupName vs name)
+  thesisTitle: formData.title,
+  sections: [formData.section], // Schema expects an array of strings?
+  
+  advisers: {
+    seAdviser: formData.adviser
+  },
+
+  // 👇 FIX: Nest these inside a 'defense' object
+  defense: {
+    date: formData.defenseDate,
+    time: formData.defenseTime,
+    status: formData.status
+  },
+
+  members: membersList,
+  
+  panelists: {
+    chair: formData.panelChair,
+    internal: internalPanelist, 
+    external: formData.panelExternal
+  }
+};
 
    try {
      const url = editingGroup ? `/api/groups/${editingGroup.id}` : '/api/groups';
