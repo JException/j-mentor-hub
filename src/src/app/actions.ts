@@ -108,7 +108,7 @@ export async function togglePinGroup(groupId: string, currentStatus: boolean) {
   }
 }
 
-export async function getGroupsFromDB(role: string) {
+export async function getGroupsFromDB(currentUser?: string) {
   try {
     await dbConnect();
     // Fetch data and convert to plain JS objects

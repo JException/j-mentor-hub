@@ -6,6 +6,7 @@ import {
   ChevronDown, ExternalLink, X, Loader2, Download,
   HardDrive, Gavel, UserCheck, LayoutGrid
 } from 'lucide-react';
+// Ensure these actions exist in your @/app/actions.ts file
 import { getGroupsFromDB, addFileToGroup, removeFileFromGroup } from "@/app/actions"; 
 
 // --- TYPES ---
@@ -18,9 +19,9 @@ interface FileDoc {
 }
 
 interface Panelists {
-    chair?: string;
-    internal?: string;
-    external?: string;
+   chair?: string;
+   internal?: string;
+   external?: string;
 }
 
 interface Group {
@@ -28,7 +29,7 @@ interface Group {
   groupName: string;
   thesisTitle: string;
   files?: FileDoc[]; 
-  panelists?: Panelists; // Added panelists to check role
+  panelists?: Panelists;
 }
 
 interface UploadResponse {
@@ -37,11 +38,10 @@ interface UploadResponse {
   error?: string;
 }
 
-// Storage Interface
 interface StorageStats {
-    usedMB: number;
-    totalMB: number;
-    percentage: number;
+   usedMB: number;
+   totalMB: number;
+   percentage: number;
 }
 
 export default function FilesPage() {
@@ -66,6 +66,7 @@ export default function FilesPage() {
 
   // 1. Get Current User
   useEffect(() => {
+    // Check both potential storage keys
     const storedUser = localStorage.getItem("audit_user") || localStorage.getItem("currentUser");
     if (storedUser) {
         setCurrentUser(storedUser.replace(/^"|"$/g, ''));
@@ -76,8 +77,13 @@ export default function FilesPage() {
   useEffect(() => {
     const fetchGroups = async () => {
       try {
-        const data = await getGroupsFromDB(currentUser);
-        if (data) setGroups(JSON.parse(JSON.stringify(data)));
+        // ✅ FIX: Called without arguments to match your Server Action definition
+        const data = await getGroupsFromDB();
+        
+        if (data) {
+            // Parse/Stringify removes Mongoose specific object types (like ObjectId) to prevent warnings
+            setGroups(JSON.parse(JSON.stringify(data)));
+        }
         
         // Simulated Storage Stats
         setTimeout(() => {
@@ -107,6 +113,7 @@ export default function FilesPage() {
       setExpandedGroupId(groupId);
       const group = groups.find(g => g._id === groupId);
       if (group && group.files && group.files.length > 0) {
+        // Auto-select the most recent file
         const latestFile = group.files[group.files.length - 1]; 
         setActiveFileId(latestFile.fileId);
       }
@@ -116,12 +123,13 @@ export default function FilesPage() {
   const handleUploadClick = (e: React.MouseEvent, groupId: string) => {
     e.stopPropagation(); 
     setUploadTargetGroupId(groupId);
+    // Slight delay to ensure state updates before clicking input
     setTimeout(() => {
         if (fileInputRef.current) {
             fileInputRef.current.value = ""; 
             fileInputRef.current.click();
         }
-    }, 100);
+    }, 50);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -134,7 +142,7 @@ export default function FilesPage() {
     setIsUploading(true);
 
     try {
-      // 1. Upload to Vercel Blob
+      // 1. Upload to Vercel Blob (or your upload API)
       const response = await fetch(
         `/api/upload?filename=${encodeURIComponent(file.name)}`,
         { method: 'POST', body: file }
@@ -148,12 +156,13 @@ export default function FilesPage() {
       const blobData = await response.json();
       const fileUrl = blobData.url;
 
-      // 2. Save URL to MongoDB
+      // 2. Save URL to MongoDB via Server Action
       const result = await addFileToGroup(targetId, fileUrl) as UploadResponse;
 
       if (result.success && result.file) {
         const newFileDoc = result.file;
         
+        // Optimistic UI Update
         setGroups(prev => prev.map(g => {
             if(g._id === targetId) {
                 const updatedFiles = [...(g.files || []), newFileDoc];
@@ -167,7 +176,7 @@ export default function FilesPage() {
             setExpandedGroupId(targetId);
         }
         
-        // Optimistically update storage
+        // Optimistic Storage Update
         setStorageStats(prev => {
              const newUsed = prev.usedMB + (file.size / 1024 / 1024);
              return {
@@ -194,6 +203,7 @@ export default function FilesPage() {
   const handleDeleteFile = async (groupId: string, fileId: string) => {
     if(!confirm("Delete this file?")) return;
     
+    // Optimistic Delete
     setGroups(prev => prev.map(g => {
       if (g._id === groupId) {
         return { ...g, files: (g.files || []).filter(f => f.fileId !== fileId) };
@@ -213,15 +223,16 @@ export default function FilesPage() {
                           (g.thesisTitle || "").toLowerCase().includes(searchQuery.toLowerCase());
 
     // 2. Role Determination
-    // Check if user is in the panelist list
     const p = g.panelists || {};
     const panelistString = `${p.chair || ''} ${p.internal || ''} ${p.external || ''}`.toLowerCase();
     
-    // User keywords (handle partial matches or first names)
-    const myNameKeywords = [currentUser, "Pura", "Justine", "Jude"].filter(Boolean).map(n => n.toLowerCase());
+    // ✅ Updated: Rely on currentUser mostly. 
+    // You can add hardcoded admins here if strictly necessary.
+    const myNameKeywords = [currentUser].filter(Boolean).map(n => n.toLowerCase());
     
+    // Check if the current user's name appears in the panelist list
     const isPanelist = myNameKeywords.some(keyword => panelistString.includes(keyword));
-    const isMentee = !isPanelist; // Default assumption: if not panelist, you are mentee/adviser
+    const isMentee = !isPanelist; // Default assumption
 
     // 3. Tab Filter
     if (filterMode === 'mentee' && !isMentee) return false;
@@ -329,13 +340,14 @@ export default function FilesPage() {
         ) : (
           filteredGroups.map(group => {
             const isExpanded = expandedGroupId === group._id;
+            // Reverse files to show newest first
             const files = [...(group.files || [])].reverse(); 
             const currentFile = files.find(f => f.fileId === activeFileId);
             
             // Re-calculate role for Badge Display
             const p = group.panelists || {};
             const panelistString = `${p.chair || ''} ${p.internal || ''} ${p.external || ''}`.toLowerCase();
-            const myNameKeywords = [currentUser, "Pura", "Justine", "Jude"].filter(Boolean).map(n => n.toLowerCase());
+            const myNameKeywords = [currentUser].filter(Boolean).map(n => n.toLowerCase());
             const isPanelist = myNameKeywords.some(keyword => panelistString.includes(keyword));
 
             return (
@@ -359,13 +371,13 @@ export default function FilesPage() {
                       
                       {/* --- ROLE BADGE --- */}
                       {isPanelist ? (
-                         <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-orange-50 text-orange-600 border border-orange-100">
-                            <Gavel size={10} /> Panelist
-                         </span>
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-orange-50 text-orange-600 border border-orange-100">
+                             <Gavel size={10} /> Panelist
+                          </span>
                       ) : (
-                         <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-green-50 text-green-700 border border-green-100">
-                            <UserCheck size={10} /> Mentee Group
-                         </span>
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-green-50 text-green-700 border border-green-100">
+                             <UserCheck size={10} /> Mentee Group
+                          </span>
                       )}
 
                       {files.length > 0 && (
@@ -403,13 +415,13 @@ export default function FilesPage() {
 
                 {isExpanded && (
                   <div className="border-t border-slate-100 bg-slate-50/50 p-4 md:p-6">
-                    {/* Mobile Upload Button (Visible only when expanded on mobile) */}
+                    {/* Mobile Upload Button */}
                     <button 
                       onClick={(e) => handleUploadClick(e, group._id)}
                       disabled={isUploading}
                       className="flex md:hidden w-full items-center justify-center gap-2 bg-slate-900 hover:bg-blue-600 text-white px-4 py-3 rounded-xl text-xs font-bold mb-4 shadow-sm"
                     >
-                       <UploadCloud size={16} /> UPLOAD NEW PDF
+                        <UploadCloud size={16} /> UPLOAD NEW PDF
                     </button>
 
                     {files.length === 0 ? (
@@ -479,6 +491,7 @@ export default function FilesPage() {
                                  className="w-full h-full"
                                  frameBorder="0"
                                />
+                               {/* Fallback Object for reliability */}
                                <object
                                 data={currentFile.url}
                                 type="application/pdf"
