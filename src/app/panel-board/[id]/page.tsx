@@ -282,7 +282,7 @@ useEffect(() => {
             setHasUnsavedChanges(false); 
             alert("✅ Evaluation Saved Successfully!");
         } else {
-            throw new Error(result?.error || "Unknown error occurred");
+            throw new Error((result as any)?.error || "Unknown error occurred");
         }
       } catch (error) {
         console.error("Save Error:", error);
