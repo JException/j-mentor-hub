@@ -9,7 +9,7 @@ import {
   Clock, Download, ChevronRight, Loader2, AlertOctagon
 } from 'lucide-react';
 import Link from 'next/link';
-import { getGroupsFromDB, saveGroupEvaluation } from "@/app/actions";
+import { getGroupsFromDB, saveGroupEvaluation } from "../../actions";
 
 // --- TYPES ---
 interface FileDoc {

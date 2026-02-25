@@ -1,61 +1,51 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import AppSidebar from "./../components/AppSidebar";
-import { SysAdminButton } from "./../components/SysAdminButton";
+import AuthGate from "../components/AuthGate";
 
 const inter = Inter({ subsets: ["latin"] });
 
-// 1. VIEWPORT SETTINGS (Crucial for Mobile App Feel)
-// This locks the zoom and sets the browser bar colors.
 export const viewport: Viewport = {
-  themeColor: "#f8fafc", // Matches your bg-slate-50
+  themeColor: "#f8fafc",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  userScalable: false, // Prevents zooming like a native app
+  userScalable: false,
 };
 
-// 2. METADATA & ICONS
 export const metadata: Metadata = {
   title: "Hubble",
   description: "Admin Console",
-  manifest: "/manifest.json", // Link to your PWA manifest
-  
-  // Icons for Browser Tabs & Home Screen
+  manifest: "/manifest.json", 
   icons: {
-    icon: "/favicon.ico", // Standard favicon (put in /public)
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
     shortcut: "/favicon.ico",
-    apple: "/apple-icon.png", // Apple Touch Icon (180x180 png in /public)
+    apple: [
+      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" }, 
+    ],
   },
-
-  // iOS Specific Settings
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Mentor Hub",
+    title: "Hubble",
+  },
+  formatDetection: {
+    telephone: false,
   },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body 
-        className={`${inter.className} bg-slate-50 flex`}
-        suppressHydrationWarning={true} 
+        className={`${inter.className} bg-slate-50 antialiased overflow-hidden`}
+        suppressHydrationWarning
       >
-        <AppSidebar />
-        
-        {/* Added 'pt-[env(safe-area-inset-top)]' to handle iPhone Notch/Dynamic Island */}
-        <main className="flex-1 h-screen overflow-y-auto p-4 md:p-8 relative pt-[env(safe-area-inset-top)]">
-          {children}
-          {/* 👇 This stays the same */}
-          <SysAdminButton /> 
-        </main>
+        {/* We pass the children into your security gate */}
+        <AuthGate>{children}</AuthGate>
       </body>
     </html>
   );
