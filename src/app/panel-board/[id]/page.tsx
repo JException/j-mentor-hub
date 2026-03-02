@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { getGroupsFromDB, saveGroupEvaluation } from "../../actions";
+import ExcelJS from 'exceljs';
 
 // --- TYPES ---
 interface FileDoc {
@@ -26,10 +27,16 @@ interface Group {
   thesisTitle: string;
   files?: FileDoc[]; 
   members?: string[];
+  defense?: {
+    date: string;
+    time: string;
+    status: string;
+  };
 }
 
 // --- RUBRIC CONFIGURATION ---
 // 1. PAPER RUBRIC (Total Weight: 8)
+
 const PAPER_RUBRIC = [
   {
     title: "Chapter 1: Introduction",
@@ -75,6 +82,8 @@ const INDIVIDUAL_RUBRIC = [
   { id: 'verbal', label: "Verbal/Non-Verbal Ability", weight: 2 },
   { id: 'grooming', label: "Grooming", weight: 2 },
 ];
+
+
 
 // --- CONSTANTS FOR CALCULATIONS ---
 const MAX_RATING = 5; // Grading is 0 to 5
@@ -200,6 +209,8 @@ useEffect(() => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
+  
+
   // --- SCORE CALCULATIONS (NORMALIZED) ---
   const calculateNormalizedScore = (scores: Record<string, number>, rubric: any[], maxWeightedScore: number, categoryPercentage: number) => {
     let totalWeighted = 0;
@@ -254,6 +265,9 @@ useEffect(() => {
   };
 
   // --- SAVE TO DATABASE ---
+ // ==========================================
+  // 1. SAVE TO DATABASE ONLY
+  // ==========================================
   const handleSave = async () => {
       setIsSaving(true);
       try {
@@ -273,14 +287,12 @@ useEffect(() => {
             status: "COMPLETED"
         };
 
-        // 🟢 SANITIZATION FIX: Ensure object is clean JSON before sending to Server Action
         const cleanPayload = JSON.parse(JSON.stringify(evaluationData));
-
         const result = await saveGroupEvaluation(cleanPayload);
         
         if(result && result.success) {
             setHasUnsavedChanges(false); 
-            alert("✅ Evaluation Saved Successfully!");
+            alert("✅ Evaluation Saved to Database Successfully!");
         } else {
             throw new Error((result as any)?.error || "Unknown error occurred");
         }
@@ -290,6 +302,135 @@ useEffect(() => {
       } finally {
         setIsSaving(false);
       }
+  };
+
+  // ==========================================
+  // 2. EXPORT TO EXCEL ONLY
+  // ==========================================
+  // ==========================================
+  // 2. EXPORT TO EXCEL ONLY (SAFE XML VERSION)
+  // ==========================================
+  const handleExportExcel = async () => {
+    if (!group) return;
+
+    try {
+      const response = await fetch('/Grading_Template.xlsx');
+      if (!response.ok) {
+          alert("❌ Cannot find Grading_Template.xlsx in your public folder.");
+          return;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(arrayBuffer);
+
+      const groupSheet = workbook.getWorksheet('GROUPGRADE'); 
+      if (!groupSheet) {
+          alert("❌ Cannot find a tab named 'GROUPGRADE' in your Excel template.");
+          return;
+      }
+
+      groupSheet.getCell('A6').value = String(group?.groupName || "N/A"); 
+      groupSheet.getCell('A67').value = String(group?.groupName || "N/A"); 
+      groupSheet.getCell('A9').value = String(group?.thesisTitle || "N/A");
+      groupSheet.getCell('A70').value = String(group?.thesisTitle|| "N/A"); 
+      groupSheet.getCell('A14').value = String(`${group?.defense?.date || 'TBD'} | ${group?.defense?.time || 'TBD'}`);
+      groupSheet.getCell('A75').value = String(`${group?.defense?.date || 'TBD'} | ${group?.defense?.time || 'TBD'}`);
+      
+// 👇 ADD THIS NEW BLOCK FOR PROPONENT NAMES
+      const nameCells = ['A18', 'A19', 'E18', 'E19'];
+      
+      group?.members?.forEach((member, index) => {
+         // This ensures it only maps as many members as the group actually has
+         if (nameCells[index]) {
+            groupSheet.getCell(nameCells[index]).value = String(member);
+         }
+      });
+      // 👆 END OF PROPONENT NAMES
+
+
+    //Chapter 1
+      groupSheet.getCell('G31').value = (Number(paperScores['background']) || 0) * 1;
+      groupSheet.getCell('G32').value = (Number(paperScores['significance']) || 0) * 1;
+      groupSheet.getCell('G33').value = (Number(paperScores['objectives']) || 0) * 2; // <--- Weight x2
+      groupSheet.getCell('G34').value = (Number(paperScores['scope']) || 0) * 1;
+      groupSheet.getCell('G35').value = (Number(paperScores['framework']) || 0) * 1;
+      groupSheet.getCell('G36').value = (Number(paperScores['algorithm']) || 0) * 2; // <--- Weight x2
+
+      //Chapter 2
+      groupSheet.getCell('G40').value = (Number(paperScores['context']) || 0) * 1;
+      groupSheet.getCell('G41').value = (Number(paperScores['references']) || 0) * 1;
+     
+      //Chapter 3
+      groupSheet.getCell('G45').value = (Number(paperScores['design']) || 0) * 1;
+      groupSheet.getCell('G46').value = (Number(paperScores['development']) || 0) * 1;
+      groupSheet.getCell('G47').value = (Number(paperScores['testing']) || 0) * 1;
+
+      //Presentation (Fixed: Changed paperScores to presScores)
+      groupSheet.getCell('G53').value = (Number(presScores['consistency']) || 0) * 3; // <--- Weight x3
+      groupSheet.getCell('G54').value = (Number(presScores['materials']) || 0) * 1;
+      groupSheet.getCell('G55').value = (Number(presScores['manner']) || 0) * 1;
+      groupSheet.getCell('G56').value = (Number(presScores['overview']) || 0) * 2; // <--- Weight x2
+
+      // Map Comments securely (Added \n\n to put a blank line between each comment)
+      const safeComments = comments.map(c => `[${c.category || 'Comment'}] ${c.text || ''}`).join('\n\n');
+      
+      const commentCell = groupSheet.getCell('A79');
+      commentCell.value = String(safeComments);
+      
+      // 👇 THIS IS THE MAGIC LINE: It tells Excel to respect your line breaks and wrap the text
+      commentCell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
+
+      const indivSheet = workbook.getWorksheet('INDVGRADE'); 
+      if (!indivSheet) {
+          alert("❌ Cannot find a tab named 'INDVGRADE' in your Excel template.");
+          return;
+      }
+      
+// 👇 ADD THIS NEW BLOCK FOR INDIVIDUAL SHEET NAMES
+      const indivNameCells = ['A13', 'A14', 'H13', 'H14'];
+      
+      group?.members?.forEach((member, index) => {
+         if (indivNameCells[index]) {
+            indivSheet.getCell(indivNameCells[index]).value = String(member);
+         }
+      });
+      // 👆 END OF INDIVIDUAL SHEET NAMES
+
+      const columns = ['G', 'I', 'K', 'M']; 
+      
+      group?.members?.forEach((member, index) => {
+        const col = columns[index];
+        if (!col) return; 
+        
+         indivSheet.getCell('A6').value = String(group?.groupName || "N/A"); 
+         indivSheet.getCell('A8').value = String(group?.thesisTitle || "N/A"); 
+         indivSheet.getCell('A10').value = String(`${group?.defense?.date || 'TBD'} | ${group?.defense?.time || 'TBD'}`);
+
+        // Multiplied by Individual Weights
+        indivSheet.getCell(`${col}19`).value = (Number(indivScores[member]?.['mastery']) || 0);
+        indivSheet.getCell(`${col}21`).value = (Number(indivScores[member]?.['qa']) || 0);
+        indivSheet.getCell(`${col}23`).value = (Number(indivScores[member]?.['delivery']) || 0);
+        indivSheet.getCell(`${col}25`).value = (Number(indivScores[member]?.['verbal']) || 0);
+        indivSheet.getCell(`${col}27`).value = (Number(indivScores[member]?.['grooming']) || 0);
+      });
+
+      // TRIGGER THE DOWNLOAD
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${String(group?.groupName || 'Group').replace(/\s+/g, '_')}_Official_Grades.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+    } catch (error) {
+      console.error("Excel generation failed:", error);
+      alert("❌ Export failed. Check the console for more details.");
+    }
   };
 
   const handleSaveComment = () => {
@@ -312,21 +453,27 @@ useEffect(() => {
     setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
   };
 
-  const handleDeleteComment = (id: string) => {
+ const handleDeleteComment = (id: string) => {
     if(confirm("Delete this comment?")) {
         setComments(prev => prev.filter(c => c.id !== id));
         setHasUnsavedChanges(true);
     }
   };
 
+  // ADD THIS HERE:
+  const handlePrint = () => {
+    window.print();
+  };
   if (!group) return (
     <div className="flex h-screen items-center justify-center text-slate-400 bg-slate-50 gap-2">
         <Loader2 className="animate-spin text-blue-600"/> Loading Panel Board...
     </div>
   );
 
+  
+
   return (
-    <div className="flex h-screen flex-col bg-slate-50 text-slate-800 font-sans overflow-hidden">
+    <div className="flex h-screen print:h-auto print:block flex-col bg-slate-50 text-slate-800 font-sans overflow-hidden print:overflow-visible">
       
       {/* HEADER */}
       <div className="h-16 bg-white border-b border-slate-200 flex items-center px-6 justify-between shrink-0 z-30 shadow-sm">
@@ -366,25 +513,36 @@ useEffect(() => {
                     </div>
                  </div>
              </div>
+<div className="flex gap-3">
+                 {/* 1. EXPORT BUTTON */}
+                 <button 
+                    onClick={handleExportExcel}
+                    className="px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-lg active:scale-95 bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200"
+                 >
+                   <Download size={16} />
+                   Export Excel
+                 </button>
 
-             <button 
-                onClick={handleSave}
-                disabled={isSaving}
-                className={`px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-lg active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed
-                    ${hasUnsavedChanges ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200' : 'bg-slate-900 hover:bg-black text-white shadow-slate-200'}
-                `}
-             >
-               {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-               {isSaving ? 'Saving...' : 'Save Grades'}
-             </button>
+                 {/* 2. SAVE BUTTON */}
+                 <button 
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className={`px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-lg active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed
+                        ${hasUnsavedChanges ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200' : 'bg-slate-900 hover:bg-black text-white shadow-slate-200'}
+                    `}
+                 >
+                   {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                   {isSaving ? 'Saving...' : 'Save Grades'}
+                 </button>
+             </div>
         </div>
       </div>
 
       {/* MAIN CONTENT SPLIT */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden print:block print:overflow-visible">
         
         {/* LEFT PANEL: MANUSCRIPT + FEEDBACK */}
-        <div className="flex-1 flex flex-col min-w-0 bg-slate-100/50 border-r border-slate-200 relative">
+        <div className="flex-1 flex flex-col min-w-0 bg-slate-100/50 border-r border-slate-200 relative print:hidden">
              
              {/* MANUSCRIPT TOOLBAR */}
              <div className="h-10 bg-white border-b border-slate-200 flex items-center justify-between px-3 shrink-0">
@@ -536,7 +694,7 @@ useEffect(() => {
         </div>
 
         {/* RIGHT PANEL: GRADING */}
-        <div className="w-[450px] bg-white border-l border-slate-200 flex flex-col shadow-xl z-20">
+        <div className="flex-1 overflow-y-auto print:overflow-visible bg-slate-50/30 custom-scrollbar p-5">
             {/* TABS */}
             <div className="flex border-b border-slate-100 shrink-0">
                 <TabButton active={activeTab === 'paper'} onClick={() => setActiveTab('paper')} icon={<FileText size={14}/>} label="Paper Rubric" />
@@ -664,4 +822,4 @@ function RubricSlider({ data, value, onChange }: { data: any, value: number, onC
             </div>
         </div>
     );
-}
+}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
