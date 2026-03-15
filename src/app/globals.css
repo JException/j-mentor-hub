@@ -103,3 +103,23 @@ body {
   clip: rect(44px, 450px, 56px, 0);
   animation: glitch 5s infinite linear alternate;
 }
+
+@keyframes matrix-rain {
+  0% { transform: translateY(-50%); }
+  100% { transform: translateY(0%); }
+}
+
+.matrix-bg {
+  mask-image: linear-gradient(to bottom, transparent, black, transparent);
+  opacity: 0.03; /* Keep it subtle so it's not distracting */
+  pointer-events: none;
+  background-image: linear-gradient(rgba(79, 70, 229, 0.2) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79, 70, 229, 0.2) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.matrix-text-overlay {
+  writing-mode: vertical-rl;
+  text-orientation: monospace;
+  animation: matrix-rain 20s linear infinite;
+}

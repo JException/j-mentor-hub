@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, Video, MapPin, Save, Clock, 
-  FileText, MessageSquare, Star, ChevronDown, ChevronUp,
+  FileText, MessageSquare, Star, ChevronDown, ChevronUp, X,
   Trash2, Edit2, Download 
 } from 'lucide-react';
 import GlobalLoader from "../../components/GlobalLoader";
