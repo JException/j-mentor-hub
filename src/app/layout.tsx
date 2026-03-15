@@ -6,7 +6,7 @@ import AuthGate from "../components/AuthGate";
 const inter = Inter({ subsets: ["latin"] });
 
 export const viewport: Viewport = {
-  themeColor: "#f8fafc",
+  themeColor: "#060B19", // 👈 Changed this to match the dark Nebula theme!
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -39,9 +39,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="dark">
       <body 
-        className={`${inter.className} bg-slate-50 antialiased overflow-hidden`}
+        // 👇 Removed bg-slate-50 and added bg-[#060B19] text-slate-200
+        className={`${inter.className} bg-[#060B19] text-slate-200 antialiased overflow-hidden`}
         suppressHydrationWarning
       >
         {/* We pass the children into your security gate */}

@@ -4,15 +4,17 @@
 @tailwind utilities;
 
 :root {
-  /* Default (Light Mode) - Forced Everywhere */
-  --background: #f8fafc;
-  --foreground: #171717;
-  color-scheme: light; /* Tells the browser to ignore system dark mode */
+  /* Dark Mode - Nebula Theme Base */
+  --background: #060B19;
+  --foreground: #f1f5f9; /* Slate 100 for readable text */
+  color-scheme: dark; 
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+  /* Optional: keeps scrolling smooth */
+  overflow-x: hidden; 
 }
 
 @media screen {
@@ -40,4 +42,64 @@ body {
     margin: 0;
     size: auto;
   }
+}
+
+.nebula-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.5) transparent;
+}
+
+.nebula-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.nebula-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.nebula-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.4); /* Glowing Indigo */
+  border-radius: 10px;
+  border: 2px solid #060B19; /* Creates a floating effect */
+}
+
+.nebula-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(232, 121, 249, 0.8); /* Fuchsia hover */
+}
+
+@keyframes glitch {
+  0% { clip-path: inset(40% 0 61% 0); transform: translate(-2px, -2px); }
+  20% { clip-path: inset(92% 0 1% 0); transform: translate(1px, 2px); }
+  40% { clip-path: inset(43% 0 1% 0); transform: translate(-1px, -1px); }
+  60% { clip-path: inset(25% 0 58% 0); transform: translate(2px, 1px); }
+  80% { clip-path: inset(54% 0 7% 0); transform: translate(-2px, 2px); }
+  100% { clip-path: inset(58% 0 43% 0); transform: translate(1px, -2px); }
+}
+
+.glitch-text {
+  position: relative;
+}
+
+.glitch-text::before, .glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.glitch-text::before {
+  left: 2px;
+  text-shadow: -2px 0 #ff00c1;
+  clip: rect(44px, 450px, 56px, 0);
+  animation: glitch 5s infinite linear alternate-reverse;
+}
+
+.glitch-text::after {
+  left: -2px;
+  text-shadow: -2px 0 #00fff9;
+  clip: rect(44px, 450px, 56px, 0);
+  animation: glitch 5s infinite linear alternate;
 }

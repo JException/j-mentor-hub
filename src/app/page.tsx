@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { getLeaderboardData, getDeliverablesFromDB } from "@/app/actions"; 
+import { getLeaderboardData, getDeliverablesFromDB } from "./actions"; 
+import GlobalLoader from "../components/GlobalLoader";
 import { 
   ArrowRight, Clock, Trophy, Calendar, Users, 
   CheckCircle2, CircleDashed, CheckSquare, FileText, FolderOpen, 
@@ -43,7 +44,6 @@ const getNextOccurrence = (dayName: string, timeString: string) => {
 };
 
 export default function DashboardPage() {
-  // --- STATE FOR USER IDENTITY ---
   const [currentUser, setCurrentUser] = useState("Sir Pura"); 
   
   const [topGroups, setTopGroups] = useState<any[]>([]); 
@@ -63,23 +63,18 @@ export default function DashboardPage() {
     tasksOngoing: 0,     
     tasksNotStarted: 0,
     groupsWithFiles: 0,
-    // --- NEW STATS FOR FILE AUDIT ---
     menteeFilesCount: 0,
     nonMenteeFilesCount: 0
   });
 
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true); 
   
 
   useEffect(() => {
-    // 1. Dark Mode Logic
-    const savedMode = localStorage.getItem('darkMode') === 'true';
-    setIsDarkMode(savedMode);
-    if (savedMode) document.documentElement.classList.add('dark');
+    document.documentElement.classList.add('dark');
 
-    // 2. Auth Check
     const checkUser = () => {
       const storedUser = localStorage.getItem("audit_user") || localStorage.getItem("currentUser");
       if (storedUser) setCurrentUser(storedUser.replace(/^"|"$/g, ''));
@@ -87,7 +82,6 @@ export default function DashboardPage() {
     checkUser();
     window.addEventListener('auth-change', checkUser);
 
-    // 3. LOAD DATA
     const loadData = async () => {
       setLoading(true);
       
@@ -97,20 +91,13 @@ export default function DashboardPage() {
 
         const { groups = [], progress = [] } = lbData || {};
 
-  
-        // Regex/Keywords for Role Detection
         const myNameKeywords = ["Pura", "Justine", "Jude", "JJCP"].map(n => n.toLowerCase());
         
         let panelistCount = 0;
-
-        // --- NEW VARIABLES FOR FILE AUDIT ---
         let totalMenteeFiles = 0;
         let totalReviewFiles = 0;
-        // ------------------------------------
 
-        // 1. Calculate Individual Group Scores & Panelist Counts
         const groupsWithScores = groups.map((group: any) => {
-          // --- Role Detection Logic ---
           const p = group.panelists || {};
           const panelistString = `${p.chair || ''} ${p.internal || ''} ${p.external || ''}`.toLowerCase();
           const isPanelist = myNameKeywords.some(keyword => panelistString.includes(keyword));
@@ -119,7 +106,6 @@ export default function DashboardPage() {
              panelistCount++;
           }
 
-          // --- Score Logic ---
           const groupId = group._id.toString();
           const groupProgress = progress.filter((p: any) => p.groupId === groupId);
           let score = 0;
@@ -128,21 +114,17 @@ export default function DashboardPage() {
             else if (p.status === 'In Progress') score += 5;
           });
 
-          // --- RETURN ENRICHED OBJECT FOR NEXT STEPS ---
           return { ...group, totalScore: score, isPanelistGroup: isPanelist };
         });
 
-        // Mentoring is Total - Panelist
         const mentoring = groups.length - panelistCount;
 
-        // 2. Sort for Leaderboard
         const sorted = groupsWithScores.sort((a: any, b: any) => {
           if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
           return a.groupName.localeCompare(b.groupName);
         });
         setTopGroups(sorted.slice(0, 4)); 
 
-        // 3. Process Schedule
         const upcomingConsultations = groups
           .map((group: any) => {
             const day = group.schedules?.day || group.consultationDay; 
@@ -162,7 +144,6 @@ export default function DashboardPage() {
 
         setConsultations(upcomingConsultations);
 
-        // 4. Calculate Max Score & Task Breakdowns
         const totalSystemScore = groupsWithScores.reduce((acc: number, group: any) => acc + group.totalScore, 0);
         
         const today = new Date();
@@ -180,7 +161,6 @@ export default function DashboardPage() {
         const totalExpected = groups.length * pastTasks.length;
         const countNotStarted = Math.max(0, totalExpected - (countDone + countOngoing));
 
-        // 5. Process Files (WITH AUDIT)
         let allFiles: any[] = [];
         let groupsUploadedCount = 0;
         
@@ -189,13 +169,11 @@ export default function DashboardPage() {
                 groupsUploadedCount++;
                 const fileCount = g.files.length;
 
-                // --- COUNT FILES BASED ON ROLE ---
                 if (g.isPanelistGroup) {
                     totalReviewFiles += fileCount;
                 } else {
                     totalMenteeFiles += fileCount;
                 }
-                // --------------------------------
 
                 const groupFiles = g.files.map((f: any) => ({
                     ...f,
@@ -220,12 +198,10 @@ export default function DashboardPage() {
           tasksOngoing: countOngoing,
           tasksNotStarted: countNotStarted,
           groupsWithFiles: groupsUploadedCount,
-          // --- SET NEW STATS ---
           menteeFilesCount: totalMenteeFiles,
           nonMenteeFilesCount: totalReviewFiles
         });
 
-        // 6. Set Deliverables List
         const upcoming = (tasksData || [])
           .filter((t: any) => t.deadline >= today.toISOString().split('T')[0])
           .sort((a: any, b: any) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
@@ -264,360 +240,382 @@ export default function DashboardPage() {
   const isGoalMet = !loading && stats.maxPossibleScore > 0 && stats.accumulatedScore >= stats.maxPossibleScore;
 
   return (
-    <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 transition-colors duration-300">
-      <IntroAnimation />
-      <div className="p-4 md:p-8 max-w-[1400px] mx-auto space-y-8">
+    <> 
+      {loading && <GlobalLoader />}
+      
+      {/* ADDED w-full and flex-1 to ensure it stretches across available space */}
+      <div className="min-h-screen w-full flex-1 bg-[#060B19] text-slate-200 relative overflow-hidden font-sans selection:bg-purple-500/30">
         
-        {/* HEADER */}
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-3xl md:text-5xl font-black tracking-tighter text-slate-900 dark:text-white">
-              JJCP Thesis <span className="text-blue-600"> Mentoring Hub 5.0</span>
-            </h1>
-            <p className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2">
-               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-               Welcome back, {currentUser}. Here is your daily briefing.
-            </p>
-          </div>
-          <div className="hidden md:block text-right">
-             <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">System Status</p>
-             <p className="text-sm font-bold text-slate-700 dark:text-slate-300">All Systems Operational</p>
-          </div>
-        </header>
+        {/* Adjusted Responsive Orbs */}
+        <div className="absolute top-[-5%] left-[-10%] w-[300px] h-[300px] md:w-[500px] md:h-[500px] bg-indigo-600/20 rounded-full blur-[80px] md:blur-[120px] mix-blend-screen pointer-events-none"></div>
+        <div className="absolute bottom-[-5%] right-[-5%] w-[350px] h-[350px] md:w-[600px] md:h-[600px] bg-fuchsia-600/10 rounded-full blur-[100px] md:blur-[150px] mix-blend-screen pointer-events-none"></div>
+        <div className="absolute top-[30%] left-[10%] w-[250px] h-[250px] md:w-[400px] md:h-[400px] bg-blue-500/10 rounded-full blur-[80px] md:blur-[100px] mix-blend-screen pointer-events-none"></div>
 
-        {/* --- HERO STATS GRID --- */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6">
+        <IntroAnimation />
+        
+        {/* Reduced padding on mobile (p-4 to p-3, gap tweaks) */}
+        <div className="p-4 sm:p-6 md:p-8 max-w-[1400px] mx-auto space-y-6 md:space-y-8 relative z-10">
           
-          {/* 1. INNOVATIVE SPLIT CARD (MENTOR vs PANEL) */}
-          <Link href="/groups" className="md:col-span-1 block group h-full">
-            <div className="relative h-full bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden hover:shadow-md transition-all duration-300">
-                {/* Background Decor */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
-                
-                <div className="h-full flex flex-col">
-                   {/* Top Half: Mentoring */}
-                   <div className="flex-1 p-5 pb-2 border-b border-dashed border-slate-100 dark:border-slate-800">
-                      <div className="flex justify-between items-start mb-1">
-                         <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
-                            <GraduationCap size={18} />
-                            <span className="text-[10px] font-bold uppercase tracking-widest">Mentoring</span>
-                         </div>
-                      </div>
-                      <div className="flex items-baseline gap-1">
-                         <span className="text-3xl font-black text-slate-800 dark:text-white">
-                            {loading ? "-" : stats.mentoringCount}
-                         </span>
-                         <span className="text-xs font-medium text-slate-400">groups</span>
-                      </div>
-                   </div>
-
-                   {/* Bottom Half: Paneling */}
-                   <div className="flex-1 p-5 pt-3 bg-slate-50/50 dark:bg-slate-800/30 group-hover:bg-blue-50/30 dark:group-hover:bg-slate-800 transition-colors">
-                      <div className="flex justify-between items-start mb-1">
-                         <div className="flex items-center gap-2 text-indigo-500 dark:text-indigo-400">
-                            <Gavel size={16} />
-                            <span className="text-[10px] font-bold uppercase tracking-widest">Panelist</span>
-                         </div>
-                      </div>
-                      <div className="flex items-baseline gap-1">
-                         <span className="text-3xl font-black text-slate-800 dark:text-white">
-                            {loading ? "-" : stats.panelingCount}
-                         </span>
-                         <span className="text-xs font-medium text-slate-400">groups</span>
-                      </div>
-                   </div>
-                </div>
+          {/* HEADER */}
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 md:mb-10 mt-2 md:mt-0">
+            <div className="space-y-1">
+              {/* Scaled down text for mobile */}
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
+                JJCP Thesis <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-fuchsia-400"> Mentoring Hub 5.0</span>
+              </h1>
+              <p className="text-indigo-200/60 font-medium flex items-center gap-2 mt-2 text-sm md:text-base">
+                 <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.8)]"></span>
+                 Welcome back, {currentUser}. Here is your cosmic briefing.
+              </p>
             </div>
-          </Link>
-
-          {/* 2. SYNCED SCHEDULES */}
-          <Link href="/parser" className="block md:col-span-1 h-full">
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm transition-all duration-200 hover:border-emerald-200 hover:shadow-md cursor-pointer h-full relative overflow-hidden flex flex-col justify-between">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl -mr-5 -mt-5"></div>
-              
-              <div className="flex items-center gap-3 mb-4">
-                 <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 flex items-center justify-center">
-                    <Calendar size={20} />
-                 </div>
-                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Synced</p>
-              </div>
-
-              <div>
-                <p className="text-4xl font-black text-slate-800 dark:text-white">
-                    {loading ? "--" : stats.synced}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">Confirmed Schedules</p>
-              </div>
+            <div className="hidden md:block text-right bg-white/5 backdrop-blur-md border border-white/10 px-4 py-2 rounded-2xl">
+               <p className="text-[10px] uppercase font-bold text-indigo-300/50 tracking-[0.2em]">System Status</p>
+               <p className="text-sm font-bold text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.5)]">All Systems Operational</p>
             </div>
-          </Link>
+          </header>
 
-          {/* 3. STUDENTS */}
-          <Link href="/masterlist" className="block md:col-span-1 h-full">
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm transition-all duration-200 hover:border-amber-200 hover:shadow-md cursor-pointer h-full relative overflow-hidden flex flex-col justify-between">
-              <div className="absolute bottom-0 left-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl -ml-5 -mb-5"></div>
-              
-              <div className="flex items-center gap-3 mb-4">
-                 <div className="w-10 h-10 rounded-2xl bg-amber-50 dark:bg-amber-900/20 text-amber-600 flex items-center justify-center">
-                    <Users size={20} />
-                 </div>
-                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Students</p>
-              </div>
-
-              <div>
-                <p className="text-4xl font-black text-slate-800 dark:text-white">
-                    {loading ? "--" : stats.students}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">Active Researchers</p>
-              </div>
-            </div>
-          </Link>
-
-          {/* 4. TOTAL SCORE PROGRESS */}
-          <div className="relative group bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm transition-all duration-200 hover:shadow-md cursor-default h-full md:col-span-1">
-             <div className="flex flex-col h-full justify-between">
-                <div className="flex justify-between items-start">
-                   <div className="flex flex-col">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Score</span>
-                      <div className="flex items-baseline gap-1">
-                        <span className={`text-3xl font-black ${isGoalMet ? "text-green-500" : "text-blue-600"}`}>
-                           {loading ? "--" : stats.accumulatedScore}
-                        </span>
-                        <span className="text-xs font-bold text-slate-300">/ {stats.maxPossibleScore}</span>
-                      </div>
-                   </div>
-                   {isGoalMet && <CheckCircle2 className="text-green-500 animate-bounce" size={20} />}
-                </div>
-
-                <div className="space-y-2">
-                   <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-1000 ease-out ${isGoalMet ? "bg-green-500" : "bg-blue-600"}`}
-                        style={{ width: `${loading ? 0 : progressPercentage}%` }}
-                      />
-                   </div>
-                   <div className="flex justify-between text-[9px] font-bold uppercase text-slate-400">
-                      <span>Progress</span>
-                      <span>{progressPercentage}%</span>
-                   </div>
-                </div>
-             </div>
-          </div>
-        </div>
-
-        {/* --- BENTO GRID CONTENT --- */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-         {/* CONSULTATION SCHEDULE */}
-          <div className="md:col-span-2 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden flex flex-col">
-              <div className="p-6 md:p-8 pb-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center">
-                      <Clock className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-white">Upcoming Consultations</h3>
-                    <p className="text-slate-500 dark:text-slate-400 text-xs font-medium">Synced from Google Sheets</p>
-                  </div>
-                </div>
-                
-                <Link href="/parser" className="bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-colors">
-                   Update <ArrowRight className="w-3 h-3"/>
-                </Link>
-             </div>
-
-             <div className="flex-1 overflow-y-auto max-h-[550px] p-6 pt-2 space-y-2 custom-scrollbar">
-                {loading ? (
-                  <div className="text-center py-8 text-slate-400 text-sm animate-pulse">Syncing calendar events...</div>
-                ) : consultations.length > 0 ? (
-                  consultations.map((consult, idx) => (
-                    <div key={idx} className="group flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-2xl border border-slate-100 dark:border-slate-700/50 hover:border-blue-200 dark:hover:border-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all gap-3">
-                        <div className="flex items-center gap-4 w-full sm:w-auto">
-                            <div className="flex flex-col items-center justify-center bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-800 dark:text-slate-200 h-12 w-14 rounded-xl shrink-0 shadow-sm">
-                                <span className="text-[9px] font-bold uppercase text-slate-400">{consult.dayDisplay.substring(0,3)}</span>
-                                <span className="text-lg font-black leading-none">{consult.nextDate.getDate()}</span>
-                            </div>
-                            
-                            <div>
-                              <h3 className="text-sm font-bold text-slate-800 dark:text-white group-hover:text-blue-600 transition-colors">{consult.groupName}</h3>
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                 <span className="flex items-center gap-1"><Clock size={12} className="text-blue-500"/> {consult.timeDisplay}</span>
-                                 <span className="hidden sm:inline text-slate-300">•</span>
-                                 <span>{consult.adviser}</span>
-                              </div>
-                            </div>
+          {/* --- HERO STATS GRID --- */}
+          {/* Switched to grid-cols-1 sm:grid-cols-2 for better tablet/mobile bridging */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+            
+            {/* 1. INNOVATIVE SPLIT CARD */}
+            <Link href="/groups" className="col-span-1 block group h-full">
+              <div className="relative h-full min-h-[140px] bg-white/5 backdrop-blur-xl rounded-[1.5rem] md:rounded-[2rem] border border-white/10 overflow-hidden hover:border-indigo-400/50 hover:shadow-[0_0_30px_rgba(99,102,241,0.15)] transition-all duration-300">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl -mr-10 -mt-10"></div>
+                  
+                  <div className="h-full flex flex-col">
+                     <div className="flex-1 p-4 md:p-5 pb-2 border-b border-white/5 group-hover:bg-indigo-500/10 transition-colors">
+                        <div className="flex justify-between items-start mb-1">
+                           <div className="flex items-center gap-2 text-indigo-400">
+                              <GraduationCap className="w-4 h-4 md:w-5 md:h-5" />
+                              <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest">Mentoring</span>
+                           </div>
                         </div>
-
-                        <div className="self-end sm:self-center">
-                           <span className="text-[9px] font-bold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2.5 py-1 rounded-full flex items-center gap-1">
-                              <CheckCircle2 size={10} /> CONFIRMED
+                        <div className="flex items-baseline gap-1">
+                           <span className="text-2xl md:text-3xl font-black text-white">
+                              {loading ? "-" : stats.mentoringCount}
                            </span>
+                           <span className="text-[10px] md:text-xs font-medium text-indigo-200/50">groups</span>
                         </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-6 text-center">
-                      <p className="text-slate-400 text-sm mb-2">No schedules synced yet.</p>
+                     </div>
+
+                     <div className="flex-1 p-4 md:p-5 pt-2 md:pt-3 bg-black/20 group-hover:bg-purple-500/10 transition-colors">
+                        <div className="flex justify-between items-start mb-1">
+                           <div className="flex items-center gap-2 text-purple-400">
+                              <Gavel className="w-[14px] h-[14px] md:w-4 md:h-4" />
+                              <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest">Panelist</span>
+                           </div>
+                        </div>
+                        <div className="flex items-baseline gap-1">
+                           <span className="text-2xl md:text-3xl font-black text-white">
+                              {loading ? "-" : stats.panelingCount}
+                           </span>
+                           <span className="text-[10px] md:text-xs font-medium text-purple-200/50">groups</span>
+                        </div>
+                     </div>
                   </div>
-                )}
-             </div>
+              </div>
+            </Link>
+
+            {/* 2. SYNCED SCHEDULES */}
+            <Link href="/parser" className="block col-span-1 h-full">
+              <div className="bg-white/5 backdrop-blur-xl p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border border-white/10 transition-all duration-300 hover:border-cyan-400/50 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)] cursor-pointer h-full relative overflow-hidden flex flex-col justify-between group min-h-[140px]">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/20 rounded-full blur-2xl -mr-5 -mt-5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                
+                <div className="flex items-center gap-3 mb-2 md:mb-4">
+                   <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center">
+                      <Calendar size={18} />
+                   </div>
+                   <p className="text-[9px] md:text-[10px] font-bold text-indigo-200/50 uppercase tracking-widest">Synced</p>
+                </div>
+
+                <div>
+                  <p className="text-3xl md:text-4xl font-black text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">
+                      {loading ? "--" : stats.synced}
+                  </p>
+                  <p className="text-[10px] md:text-xs text-cyan-200/60 mt-1">Confirmed Schedules</p>
+                </div>
+              </div>
+            </Link>
+
+            {/* 3. STUDENTS */}
+            <Link href="/masterlist" className="block col-span-1 h-full">
+              <div className="bg-white/5 backdrop-blur-xl p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border border-white/10 transition-all duration-300 hover:border-fuchsia-400/50 hover:shadow-[0_0_30px_rgba(232,121,249,0.15)] cursor-pointer h-full relative overflow-hidden flex flex-col justify-between group min-h-[140px]">
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-fuchsia-500/20 rounded-full blur-2xl -ml-5 -mb-5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                
+                <div className="flex items-center gap-3 mb-2 md:mb-4">
+                   <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20 flex items-center justify-center">
+                      <Users size={18} />
+                   </div>
+                   <p className="text-[9px] md:text-[10px] font-bold text-indigo-200/50 uppercase tracking-widest">Students</p>
+                </div>
+
+                <div>
+                  <p className="text-3xl md:text-4xl font-black text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]">
+                      {loading ? "--" : stats.students}
+                  </p>
+                  <p className="text-[10px] md:text-xs text-fuchsia-200/60 mt-1">Active Researchers</p>
+                </div>
+              </div>
+            </Link>
+
+            {/* 4. TOTAL SCORE PROGRESS */}
+            <div className="relative bg-white/5 backdrop-blur-xl p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border border-white/10 shadow-sm transition-all duration-300 h-full col-span-1 flex flex-col justify-between overflow-hidden min-h-[140px]">
+               <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl -mr-10 -mt-10 ${isGoalMet ? 'bg-cyan-500/20' : 'bg-blue-500/20'}`}></div>
+
+               <div className="flex justify-between items-start z-10 mb-4 md:mb-0">
+                  <div className="flex flex-col">
+                     <span className="text-[9px] md:text-[10px] font-bold text-indigo-200/50 uppercase tracking-[0.2em] mb-1">Total Score</span>
+                     <div className="flex items-baseline gap-1">
+                       <span className={`text-2xl md:text-3xl font-black drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] ${isGoalMet ? "text-cyan-400" : "text-indigo-400"}`}>
+                          {loading ? "--" : stats.accumulatedScore}
+                       </span>
+                       <span className="text-[10px] md:text-xs font-bold text-slate-500">/ {stats.maxPossibleScore}</span>
+                     </div>
+                  </div>
+                  {isGoalMet && <CheckCircle2 className="text-cyan-400 animate-pulse drop-shadow-[0_0_10px_rgba(34,211,238,0.8)] w-5 h-5 md:w-6 md:h-6" />}
+               </div>
+
+               <div className="space-y-2 z-10">
+                  <div className="w-full h-1.5 md:h-2 bg-black/40 rounded-full overflow-hidden border border-white/5">
+                     <div 
+                       className={`h-full rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_currentColor] ${isGoalMet ? "bg-cyan-400" : "bg-gradient-to-r from-indigo-500 to-purple-500"}`}
+                       style={{ width: `${loading ? 0 : progressPercentage}%` }}
+                     />
+                  </div>
+                  <div className="flex justify-between text-[8px] md:text-[9px] font-bold uppercase text-indigo-300/60">
+                     <span>Progress</span>
+                     <span>{progressPercentage}%</span>
+                  </div>
+               </div>
+            </div>
           </div>
 
-          {/* RIGHT COLUMN STACK */}
-          <div className="flex flex-col gap-6">
-
-            {/* LEADERBOARD CARD */}
-            <div className="bg-slate-900 dark:bg-black p-6 rounded-[2.5rem] text-white shadow-xl flex flex-col relative overflow-hidden min-h-[300px]">
-              <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full blur-[60px] opacity-40 pointer-events-none -mr-10 -mt-10"></div>
-
-              <div className="flex items-center justify-between mb-6 z-10">
-                <h3 className="text-lg font-bold flex items-center gap-2">
-                    <Trophy className="w-5 h-5 text-yellow-400" /> Leaderboard
-                </h3>
-                <Link href="/leaderboards" className="text-[10px] font-bold text-slate-400 hover:text-white transition-colors uppercase tracking-widest bg-white/10 px-3 py-1 rounded-full backdrop-blur-md">View All</Link>
-              </div>
-              
-              <div className="flex-1 flex flex-col gap-2 z-10 overflow-y-auto max-h-[300px] custom-scrollbar pr-2"> 
-                {loading ? (
-                    <div className="space-y-3 opacity-20 animate-pulse"> 
-                        <div className="h-12 w-full bg-white/20 rounded-xl" />
-                        <div className="h-12 w-full bg-white/20 rounded-xl" />
+          {/* --- BENTO GRID CONTENT --- */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            
+           {/* CONSULTATION SCHEDULE */}
+            <div className="md:col-span-2 bg-white/5 backdrop-blur-xl rounded-[1.5rem] md:rounded-[2.5rem] border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] relative overflow-hidden flex flex-col">
+                <div className="p-5 md:p-8 pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/5">
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <div className="h-10 w-10 md:h-12 md:w-12 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-xl md:rounded-2xl flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+                        <Clock className="w-5 h-5 md:w-6 md:h-6" />
                     </div>
-                ) : topGroups.length > 0 ? (
-                    topGroups.map((group, index) => (
-                        <div key={group._id} className="flex items-center justify-between bg-white/5 hover:bg-white/10 transition-colors p-3 rounded-2xl border border-white/5 backdrop-blur-sm">
-                            <div className="flex items-center gap-3 overflow-hidden">
-                                <div className={`w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-xs font-black shadow-lg
-                                    ${index === 0 ? 'bg-gradient-to-br from-yellow-300 to-yellow-600 text-yellow-900' : 
-                                      index === 1 ? 'bg-gradient-to-br from-slate-200 to-slate-400 text-slate-800' : 
-                                      index === 2 ? 'bg-gradient-to-br from-orange-300 to-orange-500 text-orange-900' :
-                                      'bg-slate-800 text-slate-400 border border-slate-700'
-                                    }`}>
-                                    {index + 1}
-                                </div>
-                                <span className="font-semibold text-sm truncate text-slate-200 max-w-[100px]">
-                                    {group.groupName}
-                                </span>
-                            </div>
-                            <span className="font-mono font-bold text-blue-300 text-sm bg-blue-500/20 px-2 py-1 rounded-lg">
-                                {group.totalScore}
-                            </span>
-                        </div>
-                    ))
-                ) : (
-                    <div className="h-full flex items-center justify-center text-slate-500 text-sm">No rankings yet.</div>
-                )}
-              </div>
-            </div>
+                    <div>
+                      <h3 className="text-lg md:text-2xl font-bold text-white">Upcoming Consultations</h3>
+                      <p className="text-indigo-200/50 text-[10px] md:text-xs font-medium">Synced from Google Sheets</p>
+                    </div>
+                  </div>
+                  
+                  <Link href="/parser" className="w-full sm:w-auto text-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-colors">
+                     Update <ArrowRight className="w-3 h-3"/>
+                  </Link>
+               </div>
 
-            {/* UPCOMING DEADLINES */}
-            <div className="bg-blue-50/50 dark:bg-slate-900 p-8 rounded-[2.5rem] border border-blue-100 dark:border-slate-800 flex flex-col transition-colors flex-1">
-              <h3 className="font-bold text-blue-900 dark:text-blue-400 mb-4 flex items-center gap-2">
-                <Calendar className="w-5 h-5" /> Deliverables
-              </h3>
-              
-              <div className="space-y-3 flex-1">
-                {loading ? (
-                      <p className="text-blue-300 text-xs">Loading...</p>
-                ) : deliverables.length > 0 ? (
-                    deliverables.map((task, i) => {
-                        const [month, day] = formatDate(task.deadline).split(' ');
-                        return (
-                          <div key={i} className="flex items-center gap-4 bg-white dark:bg-white/5 p-3 rounded-2xl shadow-sm border border-slate-100 dark:border-transparent">
-                              <div className="flex flex-col items-center justify-center bg-blue-50 dark:bg-blue-900/30 px-3 py-2 rounded-xl min-w-[55px]">
-                                    <span className="text-[9px] font-bold text-blue-400 uppercase leading-none mb-1">{month}</span>
-                                    <span className="text-xl font-black text-blue-600 dark:text-blue-400 leading-none">{day}</span>
+               <div className="flex-1 overflow-y-auto max-h-[400px] md:max-h-[550px] p-4 md:p-6 space-y-3 custom-scrollbar">
+                  {loading ? (
+                    <div className="text-center py-8 text-indigo-300/50 text-xs md:text-sm animate-pulse">Syncing cosmic calendar...</div>
+                  ) : consultations.length > 0 ? (
+                    consultations.map((consult, idx) => (
+                      <div key={idx} className="group flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 md:p-4 rounded-xl md:rounded-2xl bg-black/20 border border-white/5 hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all gap-3 md:gap-4">
+                          <div className="flex items-center gap-3 md:gap-4 w-full sm:w-auto">
+                              <div className="flex flex-col items-center justify-center bg-white/5 border border-white/10 text-white h-10 w-12 md:h-12 md:w-14 rounded-lg md:rounded-xl shrink-0 shadow-inner">
+                                  <span className="text-[8px] md:text-[9px] font-bold uppercase text-indigo-300/70">{consult.dayDisplay.substring(0,3)}</span>
+                                  <span className="text-base md:text-lg font-black leading-none drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]">{consult.nextDate.getDate()}</span>
                               </div>
-                              <div className="flex flex-col overflow-hidden">
-                                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">{task.taskName}</span>
-                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate uppercase tracking-wider">{task.type}</span>
+                              
+                              <div className="overflow-hidden">
+                                <h3 className="text-xs md:text-sm font-bold text-slate-200 group-hover:text-indigo-300 transition-colors truncate">{consult.groupName}</h3>
+                                <div className="flex flex-wrap items-center gap-1.5 md:gap-2 text-[10px] md:text-xs text-indigo-200/50 mt-1">
+                                   <span className="flex items-center gap-1"><Clock size={10} className="text-indigo-400"/> {consult.timeDisplay}</span>
+                                   <span className="hidden sm:inline text-white/20">•</span>
+                                   <span className="truncate">{consult.adviser}</span>
+                                </div>
                               </div>
                           </div>
-                        );
-                    })
-                ) : (
-                    <div className="h-full flex items-center justify-center text-blue-300 text-xs">No pending deadlines</div>
-                )}
-              </div>
-              
-              <div className="mt-4 text-center">
-                <Link href="/deliverables" className="text-[10px] font-bold text-blue-400 uppercase tracking-widest hover:text-blue-600">View Full Calendar</Link>
-              </div>
+
+                          <div className="self-start sm:self-center shrink-0 mt-2 sm:mt-0">
+                             <span className="text-[8px] md:text-[9px] font-bold bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 px-2 py-1 md:px-3 md:py-1.5 rounded-full flex items-center gap-1 md:gap-1.5 shadow-[0_0_10px_rgba(34,211,238,0.1)]">
+                                <CheckCircle2 size={10} /> CONFIRMED
+                             </span>
+                          </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                       <p className="text-indigo-200/40 text-xs md:text-sm mb-2">No schedules synced in this quadrant.</p>
+                    </div>
+                  )}
+               </div>
             </div>
 
-          </div>
+            {/* RIGHT COLUMN STACK */}
+            <div className="flex flex-col gap-4 md:gap-6">
 
-          {/* BOTTOM ROW: REPOSITORY */}
-          <div className="md:col-span-3 bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-8 transition-colors">
-              <div className="md:w-1/3 border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-800 pb-6 md:pb-0 md:pr-6 flex flex-col">
+               {/* LEADERBOARD CARD */}
+              <div className="bg-black/40 backdrop-blur-xl p-5 md:p-6 rounded-[1.5rem] md:rounded-[2.5rem] border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] flex flex-col relative overflow-hidden min-h-[250px] md:min-h-[300px]">
+                <div className="absolute top-0 right-0 w-32 md:w-48 h-32 md:h-48 bg-gradient-to-br from-yellow-500/20 to-orange-500/20 rounded-full blur-[40px] md:blur-[60px] pointer-events-none -mr-10 -mt-10"></div>
+
+                <div className="flex items-center justify-between mb-4 md:mb-6 z-10">
+                  <h3 className="text-base md:text-lg font-bold flex items-center gap-2 text-white">
+                      <Trophy className="w-4 h-4 md:w-5 md:h-5 text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]" /> Leaderboard
+                  </h3>
+                  <Link href="/leaderboards" className="text-[9px] md:text-[10px] font-bold text-indigo-300/70 hover:text-white transition-colors uppercase tracking-[0.2em] bg-white/5 border border-white/10 px-2 py-1 md:px-3 md:py-1 rounded-full">View All</Link>
+                </div>
                 
-                <Link href="/files" className="inline-block self-start">
-                    <div className="h-12 w-12 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500 rounded-2xl flex items-center justify-center mb-4 cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors">
-                      <FolderOpen className="w-6 h-6" />
-                    </div>
-                </Link>
-
-                <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Files Repository</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Recent uploads from your thesis groups.</p>
-                
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-2xl font-black text-slate-800 dark:text-white">{stats.groupsWithFiles}</span>
-                  <span className="text-xs font-medium text-slate-400">groups contributed</span>
+                <div className="flex-1 flex flex-col gap-2 md:gap-3 z-10 overflow-y-auto custom-scrollbar pr-1 md:pr-2"> 
+                  {loading ? (
+                      <div className="space-y-3 opacity-20 animate-pulse"> 
+                          <div className="h-10 md:h-12 w-full bg-white/10 rounded-xl" />
+                          <div className="h-10 md:h-12 w-full bg-white/10 rounded-xl" />
+                      </div>
+                  ) : topGroups.length > 0 ? (
+                      topGroups.map((group, index) => (
+                          <div key={group._id} className="flex items-center justify-between bg-white/5 hover:bg-white/10 transition-colors p-2 md:p-3 rounded-xl md:rounded-2xl border border-white/5">
+                              <div className="flex items-center gap-2 md:gap-3 overflow-hidden">
+                                  <div className={`w-6 h-6 md:w-8 md:h-8 flex-shrink-0 rounded-full flex items-center justify-center text-[10px] md:text-xs font-black shadow-lg
+                                      ${index === 0 ? 'bg-gradient-to-br from-yellow-300 to-yellow-600 text-yellow-950 shadow-[0_0_15px_rgba(250,204,21,0.4)]' : 
+                                        index === 1 ? 'bg-gradient-to-br from-slate-300 to-slate-500 text-slate-900 shadow-[0_0_10px_rgba(203,213,225,0.3)]' : 
+                                        index === 2 ? 'bg-gradient-to-br from-orange-400 to-orange-600 text-orange-950 shadow-[0_0_10px_rgba(249,115,22,0.3)]' :
+                                        'bg-white/10 text-white/50 border border-white/10'
+                                      }`}>
+                                      {index + 1}
+                                  </div>
+                                  <span className="font-semibold text-xs md:text-sm truncate text-slate-200 max-w-[120px] md:max-w-[100px]">
+                                      {group.groupName}
+                                  </span>
+                              </div>
+                              <span className="font-mono font-bold text-cyan-400 text-xs md:text-sm bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 md:px-2 md:py-1 rounded-lg">
+                                  {group.totalScore}
+                              </span>
+                          </div>
+                      ))
+                  ) : (
+                      <div className="h-full flex items-center justify-center text-indigo-300/40 text-xs md:text-sm">No rankings.</div>
+                  )}
                 </div>
-                <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mb-8">
-                   <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${uploadPercentage}%` }}></div>
-                </div>
-
-                {/* --- NEW AUDIT SECTION (Counters) --- */}
-                <div className="mt-auto grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100 dark:border-indigo-500/10">
-                        <p className="text-[10px] font-bold uppercase text-indigo-400 tracking-widest mb-1">Mentee Files</p>
-                        <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{loading ? '-' : stats.menteeFilesCount}</p>
-                    </div>
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700/50">
-                        <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-1">Review Files</p>
-                        <p className="text-2xl font-black text-slate-600 dark:text-slate-300">{loading ? '-' : stats.nonMenteeFilesCount}</p>
-                    </div>
-                </div>
-                {/* ------------------------------------ */}
               </div>
 
-              <div className="bg-white rounded-2xl p-6 shadow-sm w-full h-full">
-                 <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Recent Uploads</h4>
-                    <Link href="/files" className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest hover:text-indigo-600">View All</Link>
-                 </div>
+              {/* UPCOMING DEADLINES */}
+              <div className="bg-indigo-900/20 backdrop-blur-xl p-5 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-indigo-500/20 flex flex-col flex-1 relative overflow-hidden">
+                <div className="absolute bottom-0 right-0 w-24 h-24 md:w-32 md:h-32 bg-purple-500/20 rounded-full blur-[40px] md:blur-[50px] pointer-events-none"></div>
 
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                     {loading ? (
-                        <p className="text-xs text-slate-400">Loading files...</p>
-                     ) : recentFiles.length > 0 ? (
-                        recentFiles.map((file, idx) => (
-                           <div key={idx} className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl flex flex-col justify-between hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                              <div className="flex justify-between items-start mb-4">
-                                 <div className="text-indigo-400">
-                                    {file.url && (file.url.endsWith('.png') || file.url.endsWith('.jpg')) 
-                                      ? <ImageIcon size={20}/> 
-                                      : <FileText size={20}/>}
-                                 </div>
-                                 <span className="text-[9px] font-bold text-slate-400 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg">{formatDate(file.uploadedAt)}</span>
-                              </div>
-                              <div>
-                                 <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate mb-1" title={file.name}>{file.name || "Untitled"}</p>
-                                 <p className="text-[10px] text-indigo-500 font-bold truncate bg-indigo-50 dark:bg-indigo-900/30 inline-block px-2 py-0.5 rounded-md">
-                                    {file.groupName}
-                                 </p>
-                              </div>
-                           </div>
-                        ))
-                     ) : (
-                        <div className="col-span-3 flex items-center justify-center text-slate-400 text-sm border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl h-32">No recent files found.</div>
-                     )}
-                 </div>
+                <h3 className="font-bold text-sm md:text-base text-white mb-4 md:mb-5 flex items-center gap-2 relative z-10">
+                  <Calendar className="w-4 h-4 md:w-5 md:h-5 text-purple-400" /> Deliverables
+                </h3>
+                
+                <div className="space-y-2 md:space-y-3 flex-1 relative z-10">
+                  {loading ? (
+                        <p className="text-indigo-300/50 text-[10px] md:text-xs">Scanning timeline...</p>
+                  ) : deliverables.length > 0 ? (
+                      deliverables.map((task, i) => {
+                          const [month, day] = formatDate(task.deadline).split(' ');
+                          return (
+                            <div key={i} className="flex items-center gap-3 md:gap-4 bg-black/40 p-2 md:p-3 rounded-xl md:rounded-2xl border border-white/5 hover:border-purple-500/30 transition-colors">
+                                <div className="flex flex-col items-center justify-center bg-purple-500/10 border border-purple-500/20 px-2.5 py-1.5 md:px-3 md:py-2 rounded-lg md:rounded-xl min-w-[45px] md:min-w-[55px]">
+                                      <span className="text-[8px] md:text-[9px] font-bold text-purple-300 uppercase leading-none mb-1">{month}</span>
+                                      <span className="text-lg md:text-xl font-black text-purple-400 leading-none drop-shadow-[0_0_5px_rgba(192,132,252,0.5)]">{day}</span>
+                                </div>
+                                <div className="flex flex-col overflow-hidden">
+                                    <span className="text-xs md:text-sm font-bold text-slate-200 truncate">{task.taskName}</span>
+                                    <span className="text-[9px] md:text-[10px] text-indigo-300/60 truncate uppercase tracking-[0.1em] mt-0.5">{task.type}</span>
+                                </div>
+                            </div>
+                          );
+                      })
+                  ) : (
+                      <div className="h-full flex items-center justify-center text-indigo-300/40 text-[10px] md:text-xs">Timeline clear. No pending deadlines.</div>
+                  )}
+                </div>
+                
+                <div className="mt-4 md:mt-5 text-center relative z-10">
+                  <Link href="/deliverables" className="inline-block text-[9px] md:text-[10px] font-bold text-purple-400 uppercase tracking-[0.2em] hover:text-purple-300 transition-colors bg-purple-500/10 px-3 py-1.5 md:px-4 md:py-2 rounded-full border border-purple-500/20 w-full sm:w-auto">View Calendar</Link>
+                </div>
               </div>
-          </div>
+
+            </div>
+
+            {/* BOTTOM ROW: REPOSITORY */}
+            <div className="md:col-span-3 bg-white/5 backdrop-blur-xl p-5 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] flex flex-col md:flex-row gap-6 md:gap-8 transition-colors">
+                <div className="md:w-1/3 border-b md:border-b-0 md:border-r border-white/10 pb-5 md:pb-0 md:pr-8 flex flex-col">
+                  
+                  <Link href="/files" className="inline-block self-start group">
+                      <div className="h-10 w-10 md:h-12 md:w-12 bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-400 rounded-xl md:rounded-2xl flex items-center justify-center mb-4 md:mb-5 cursor-pointer group-hover:bg-fuchsia-500/20 transition-all shadow-[0_0_15px_rgba(232,121,249,0.2)]">
+                        <FolderOpen className="w-5 h-5 md:w-6 md:h-6" />
+                      </div>
+                  </Link>
+
+                  <h3 className="text-lg md:text-xl font-bold text-white mb-1 md:mb-2">Data Repository</h3>
+                  <p className="text-xs md:text-sm text-indigo-200/50 mb-6 md:mb-8">Interstellar transmission logs & uploads.</p>
+                  
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl md:text-3xl font-black text-white">{stats.groupsWithFiles}</span>
+                    <span className="text-[10px] md:text-xs font-medium text-indigo-300/50">groups actively transmitting</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden mb-6 md:mb-8 border border-white/5">
+                    <div className="h-full bg-gradient-to-r from-purple-500 to-fuchsia-500 rounded-full shadow-[0_0_10px_rgba(232,121,249,0.8)]" style={{ width: `${uploadPercentage}%` }}></div>
+                  </div>
+
+                  <div className="mt-auto grid grid-cols-2 gap-3 md:gap-4">
+                      <div className="p-3 md:p-4 bg-indigo-500/10 rounded-xl md:rounded-2xl border border-indigo-500/20 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 w-12 h-12 md:w-16 md:h-16 bg-indigo-500/20 blur-xl"></div>
+                          <p className="text-[8px] md:text-[10px] font-bold uppercase text-indigo-300 tracking-[0.1em] mb-1 relative z-10">Mentee Files</p>
+                          <p className="text-2xl md:text-3xl font-black text-white relative z-10">{loading ? '-' : stats.menteeFilesCount}</p>
+                      </div>
+                      <div className="p-3 md:p-4 bg-white/5 rounded-xl md:rounded-2xl border border-white/10 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 w-12 h-12 md:w-16 md:h-16 bg-white/5 blur-xl"></div>
+                          <p className="text-[8px] md:text-[10px] font-bold uppercase text-indigo-200/50 tracking-[0.1em] mb-1 relative z-10">Review Files</p>
+                          <p className="text-2xl md:text-3xl font-black text-slate-300 relative z-10">{loading ? '-' : stats.nonMenteeFilesCount}</p>
+                      </div>
+                  </div>
+                </div>
+
+                <div className="bg-black/30 rounded-[1.5rem] md:rounded-[2rem] p-4 md:p-6 border border-white/5 w-full h-full flex flex-col">
+                  <div className="flex items-center justify-between mb-4 md:mb-6">
+                      <h4 className="text-[10px] md:text-xs font-bold text-indigo-200/60 uppercase tracking-[0.2em]">Recent Transmissions</h4>
+                      <Link href="/files" className="text-[9px] md:text-[10px] font-bold text-fuchsia-400 uppercase tracking-[0.2em] hover:text-fuchsia-300 transition-colors bg-fuchsia-500/10 border border-fuchsia-500/20 px-2 py-1 md:px-3 md:py-1.5 rounded-full">View Database</Link>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 flex-1">
+                      {loading ? (
+                          <div className="col-span-1 sm:col-span-2 md:col-span-3 flex items-center justify-center text-indigo-300/40 text-xs md:text-sm">Decoding files...</div>
+                      ) : recentFiles.length > 0 ? (
+                          recentFiles.map((file, idx) => (
+                            <div key={idx} className="bg-white/5 border border-white/5 p-4 md:p-5 rounded-xl md:rounded-2xl flex flex-col justify-between hover:bg-white/10 hover:border-fuchsia-500/30 transition-all group">
+                                <div className="flex justify-between items-start mb-4 md:mb-6">
+                                  <div className="text-fuchsia-400 drop-shadow-[0_0_8px_rgba(232,121,249,0.4)]">
+                                      {file.url && (file.url.endsWith('.png') || file.url.endsWith('.jpg')) 
+                                        ? <ImageIcon size={20}/> 
+                                        : <FileText size={20}/>}
+                                  </div>
+                                  <span className="text-[8px] md:text-[9px] font-bold text-indigo-200/50 bg-black/50 border border-white/5 px-2 py-1 rounded-lg">{formatDate(file.uploadedAt)}</span>
+                                </div>
+                                <div>
+                                  <p className="text-xs md:text-sm font-bold text-slate-200 truncate mb-1 md:mb-1.5 group-hover:text-fuchsia-300 transition-colors" title={file.name}>{file.name || "Unknown_Signal.dat"}</p>
+                                  <p className="text-[9px] md:text-[10px] text-fuchsia-300 font-bold truncate bg-fuchsia-500/10 border border-fuchsia-500/20 inline-block px-2 md:px-2.5 py-0.5 md:py-1 rounded-md">
+                                      {file.groupName}
+                                  </p>
+                                </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="col-span-1 sm:col-span-2 md:col-span-3 flex items-center justify-center text-indigo-300/40 text-[10px] md:text-sm border-2 border-dashed border-white/5 rounded-xl md:rounded-2xl h-full min-h-[100px] md:min-h-[120px]">No recent transmissions found.</div>
+                      )}
+                  </div>
+                </div>
+            </div>
+
+          </div> 
 
         </div>
       </div>
-    </div>
+      
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+      `}</style>
+    </>
   );
 }

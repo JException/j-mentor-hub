@@ -2,9 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import Link from 'next/link';
-
-// 👇 Fixed Paths: Finding components in the SAME folder
+import OnboardingModal from './OnboardingModal';
 import AppSidebar from "./AppSidebar";
 import { SysAdminButton } from "./SysAdminButton";
 
@@ -15,6 +13,7 @@ import {
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [isGlobalAuthenticated, setIsGlobalAuthenticated] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [gatePassword, setGatePassword] = useState("");
   const [gateError, setGateError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -33,8 +32,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const hasAccess = localStorage.getItem('app_access_granted');
+    const onboardingSeen = localStorage.getItem('onboarding_seen');
     if (hasAccess === 'true') setIsGlobalAuthenticated(true);
-
+    if (onboardingSeen !== 'true') {
+        setShowOnboarding(true);
+      }
     const storedAttempts = localStorage.getItem('app_failed_attempts');
     const storedLockout = localStorage.getItem('app_lockout_until');
 
@@ -82,6 +84,10 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     if (gatePassword === APP_PASSWORD) {
       setIsGlobalAuthenticated(true);
       localStorage.setItem('app_access_granted', 'true');
+      const onboardingSeen = localStorage.getItem('onboarding_seen');
+      if (onboardingSeen !== 'true') {
+        setShowOnboarding(true);
+      }
       localStorage.removeItem('app_failed_attempts');
       localStorage.removeItem('app_lockout_until');
       setFailedAttempts(0);
@@ -102,20 +108,23 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       }
     }
   };
+  const closeOnboarding = () => {
+    setShowOnboarding(false);
+    localStorage.setItem('onboarding_seen', 'true'); // Save preference
+  };
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-50">
-        <Loader2 className="animate-spin text-blue-600" size={40} />
-      </div>
-    );
-  }
+  return (
+    <div className="flex h-screen w-full items-center justify-center bg-[#060B19]">
+      <Loader2 className="animate-spin text-indigo-500" size={40} />
+    </div>
+  );
+}
 
   if (!isGlobalAuthenticated) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-50 p-4">
-         {/* ... Your original login UI is simplified here for brevity, you can add your youtube iframe back if you want! ... */}
-         <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 w-full max-w-md text-center">
+  return (
+    <div className="flex h-screen w-full items-center justify-center bg-[#060B19] p-4">
+       <div className="bg-[#0c142b] p-8 rounded-[2.5rem] shadow-2xl border border-slate-800 w-full max-w-md text-center">
             <h1 className="text-3xl font-black text-slate-900 mb-2">Mentorship Hub</h1>
             <p className="text-slate-500 mb-8 font-medium">Restricted Access. Please verify your identity.</p>
             
@@ -138,14 +147,15 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // --- THE MAIN APP ONCE LOGGED IN ---
   return (
-    <div className="flex h-screen w-full flex-col md:flex-row">
-      <AppSidebar />
-      <main className="flex-1 h-screen overflow-y-auto bg-slate-50 p-4 md:p-8 relative pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-        {children}
-        <SysAdminButton /> 
-      </main>
-    </div>
-  );
+  <div className="flex h-screen w-full overflow-hidden bg-[#060B19]">
+    <AppSidebar />
+    <OnboardingModal isOpen={showOnboarding} onClose={closeOnboarding} />
+    {/* Cleaned up the main tag: removed the safe-area-inset if it's causing gaps */}
+    <main className="flex-1 h-screen overflow-y-auto overflow-x-hidden nebula-scrollbar relative">
+      {children}
+      <SysAdminButton /> 
+    </main>
+  </div>
+);
 }

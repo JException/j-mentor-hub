@@ -6,7 +6,7 @@ import {
   Trash2, Edit2, CheckCircle2, 
   Clock, FileText, ChevronRight, GraduationCap, Activity
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import GlobalLoader from "../../components/GlobalLoader";
 
 const CURRENT_USER_NAME = "Mr. Justine Jude C. Pura";
 
@@ -237,6 +237,7 @@ export default function PanelDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-blue-100">
+      {loading && <GlobalLoader />}
       <div className="fixed top-0 left-0 w-full h-96 bg-gradient-to-b from-blue-50 to-slate-50 -z-10" />
 
       <main className="max-w-7xl mx-auto p-6 md:p-8">
@@ -296,14 +297,6 @@ export default function PanelDashboard() {
             />
           </div>
         </div>
-
-        {/* LOADING & EMPTY STATES */}
-        {loading && (
-          <div className="text-center py-20 text-slate-400">
-            <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"/>
-            <p>Loading your groups...</p>
-          </div>
-        )}
 
         {!loading && filteredGroups.length === 0 && (
           <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
