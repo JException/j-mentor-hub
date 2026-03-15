@@ -32,14 +32,14 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
           <div className="p-8 lg:p-12 space-y-8 flex flex-col justify-center">
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em]">
-                <Sparkles size={12} /> System Initialized
+                <Sparkles size={12} /> ACADEMIC NEXUS
               </div>
               
               <h2 
   className="text-4xl font-bold text-white tracking-tight leading-tight glitch-text" 
   data-text="Welcome to the Mentorship Hub"
 >
-  Welcome to the <span className="text-indigo-500 italic">Mentorship Hub</span>
+  Welcome to <span className="text-indigo-400 italic">JJCP Mentorship Hub</span>
 </h2>
 
 
