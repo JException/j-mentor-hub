@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { connectToDB } from '../../../../lib/mongoose';
-import Group from '@/models/Group';
+import Group from '../../../../models/Group';
 
 // ✅ PUT: Update an existing Group
 export async function PUT(
@@ -43,6 +43,10 @@ export async function PUT(
       "defense.date": defenseData.date || body.defenseDate,
       "defense.time": defenseData.time || body.defenseTime,
       "defense.status": defenseData.status || body.status || "Pending",
+      
+      // 👇 ADDED THESE TWO LINES TO SAVE THE VERDICT AND FEEDBACK
+      "defense.verdict": defenseData.verdict || body.verdict || "None",
+      "defense.feedbackStatus": defenseData.feedbackStatus || body.feedbackStatus || "Pending",
     };
 
     // 4. Perform the update
@@ -56,7 +60,7 @@ export async function PUT(
       return NextResponse.json({ message: "Group not found" }, { status: 404 });
     }
 
-    console.log("✅ Update Success. Date saved:", updatedGroup.defense?.date);
+    console.log("✅ Update Success. Verdict saved:", updatedGroup.defense?.verdict);
 
     return NextResponse.json(updatedGroup, { status: 200 });
 

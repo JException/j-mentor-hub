@@ -34,7 +34,9 @@ const GroupSchema = new mongoose.Schema({
   defense: {
     date: { type: String },
     time: { type: String },
-    status: { type: String, default: "Pending" }
+    status: { type: String, default: "Pending" },
+  verdict: { type: String, default: 'None' }, // Add this
+  feedbackStatus: { type: String, default: 'Pending' } // Add this
   },
   // 👇 UPDATED: Allows storing Raw Slider Data
   evaluations: [
