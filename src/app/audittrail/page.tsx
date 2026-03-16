@@ -49,9 +49,10 @@ export default function AuditTrailPage() {
   // --- INITIAL LOAD ---
   useEffect(() => {
     // 1. CHECK MAIN SYSTEM AUTH FIRST (sys_auth)
-    const systemAuth = localStorage.getItem('sys_auth');
+    const systemAuth = localStorage.getItem('app_access_granted');
     if (systemAuth !== 'true') {
-        router.push('/login'); 
+        // Redirect to the root where AuthGate will show the Matrix login
+        router.push('/'); 
         return;
     }
 

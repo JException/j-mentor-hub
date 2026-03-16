@@ -1,10 +1,11 @@
 "use client";
-import React from 'react';
 import ProfileCard from '@/components/ProfileCard';
+import ElectricBorder from "@/components/ElectricBorder";
 import { 
   Code2, Cpu, Globe, Mail, Github, 
-  Twitter, Award, Zap, Terminal 
+  Twitter, Award, Zap, Terminal, Database, Layout, Server
 } from 'lucide-react';
+
 
 export default function SettingsPage() {
   return (
@@ -41,25 +42,33 @@ export default function SettingsPage() {
         </div>
 
         {/* RIGHT COLUMN: DEVELOPER INTRO & STATS */}
-        <div className="lg:col-span-7 space-y-8">
+        <div className="lg:col-span-7 space-y-8 flex flex-col">
           
-          {/* About Section */}
-          <section className="bg-[#0c142b] border border-slate-800 p-8 rounded-[32px] space-y-4 shadow-xl">
-            <h3 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-              <Code2 className="text-indigo-500" size={20} />
-              The Architect
-            </h3>
-            <p className="text-slate-400 leading-relaxed font-medium">
-  Hello! I'm an Assistant Professor and Software Engineer dedicated to bridging 
-  the gap between advanced Computer Science theory and real-world application. 
-  With a background as a DICT Master Trainer and an MBA from National Sun Yat-sen University, 
-  I specialize in building high-performance systems that empower users through 
-  digital literacy and clean, scalable architecture. 
-  This Thesis Management System was architected to streamline academic workflows 
-  using the Nebula Design System, drawing from my years of experience in both 
-  the classroom and the tech industry.
-</p>
-          </section>
+          {/* About Section - Now with Electric Border! */}
+          <ElectricBorder 
+            color="#6366f1" 
+            speed={1.5} 
+            chaos={0.15} 
+            borderRadius={32}
+            className="w-full"
+          >
+            <section className="bg-[#0c142b] p-8 rounded-[inherit] space-y-4 shadow-xl w-full">
+              <h3 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                <Code2 className="text-indigo-500" size={20} />
+                The Architect
+              </h3>
+              <p className="text-slate-400 leading-relaxed font-medium">
+                Hello! I'm an Assistant Professor and Software Engineer dedicated to bridging 
+                the gap between advanced Computer Science theory and real-world application. 
+                With a background as a DICT Master Trainer and an MBA from National Sun Yat-sen University, 
+                I specialize in building high-performance systems that empower users through 
+                digital literacy and clean, scalable architecture. 
+                This Thesis Management System was architected to streamline academic workflows 
+                using the Nebula Design System, drawing from my years of experience in both 
+                the classroom and the tech industry.
+              </p>
+            </section>
+          </ElectricBorder>
 
           {/* Tech Stack Grid */}
           <div className="grid grid-cols-2 gap-4">
@@ -70,7 +79,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Social Links */}
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-4 pt-2">
             <SocialButton icon={<Github size={18}/>} label="GitHub" href="#" />
             <SocialButton icon={<Twitter size={18}/>} label="Twitter" href="#" />
             <SocialButton icon={<Mail size={18}/>} label="Email" href="#" />

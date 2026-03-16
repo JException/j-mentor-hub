@@ -244,8 +244,7 @@ export default function DashboardPage() {
       {loading && <GlobalLoader />}
       
       {/* ADDED w-full and flex-1 to ensure it stretches across available space */}
-      <div className="min-h-screen w-full flex-1 bg-[#060B19] text-slate-200 relative overflow-hidden font-sans selection:bg-purple-500/30">
-        
+      <div className="min-h-screen bg-[#060B19] text-white p-4 pt-24 md:p-8 flex flex-col items-center">  
         {/* Adjusted Responsive Orbs */}
         <div className="absolute top-[-5%] left-[-10%] w-[300px] h-[300px] md:w-[500px] md:h-[500px] bg-indigo-600/20 rounded-full blur-[80px] md:blur-[120px] mix-blend-screen pointer-events-none"></div>
         <div className="absolute bottom-[-5%] right-[-5%] w-[350px] h-[350px] md:w-[600px] md:h-[600px] bg-fuchsia-600/10 rounded-full blur-[100px] md:blur-[150px] mix-blend-screen pointer-events-none"></div>
